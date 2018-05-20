@@ -9,6 +9,7 @@ import org.apache.spark.sql.me.matrix._
 import org.apache.spark.sql.me.partitioner._
 
 import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 
 object MeExecutionHelper {
 
@@ -238,6 +239,124 @@ object MeExecutionHelper {
       val matrix = DMatrixSerializer.deserialize(row.getStruct(3, 7))
       for(i <- 0 until numPartitions) yield (i, ((rid, cid), matrix))
     }.groupByKey(new IndexPartitioner(numPartitions, new BroadcastPartitioner(numPartitions)))
+  }
+
+  def rmmDuplicationRight(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowNum: Int, rightColNum: Int): RDD[InternalRow] = {
+    val part = new RowPartitioner(n, leftRowNum)
+    val leftRDD = repartitionWithTargetPartitioner(part, left)
+    val dupRDD = BroadcastPartitions(right, n)
+
+    leftRDD.zipPartitions(dupRDD, preservesPartitioning = true) { case (iter1, iter2) =>
+      val leftBlocks = iter1.toList
+      val rightBlocks = iter2.next()._2.toList
+
+      val pid = leftBlocks.head._1
+
+      val res = findResultRMMRight(pid, n, leftRowNum, rightColNum)
+      val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
+      res.par.map{ case (row, col) =>
+        leftBlocks.filter(row == _._2._1._1).map{ case a =>
+          rightBlocks.filter(col == _._1._2).filter(a._2._1._2 == _._1._1).map{ case b =>
+            if(!tmp.contains((row, col))){
+              tmp.put((row, col), Block.matrixMultiplication(
+                DMatrixSerializer.deserialize(a._2._2),b._2))
+            } else {
+              tmp.put((row, col), Block.incrementalMultiply(DMatrixSerializer.deserialize(a._2._2),b._2, tmp.get((row, col)).get))
+            }
+          }
+        }
+      }
+        tmp.iterator
+    }.map{ row =>
+      val rid = row._1._1
+      val cid = row._1._2
+      val pid = part.getPartition((rid, cid))
+      val mat = row._2
+      val res = new GenericInternalRow(4)
+      res.setInt(0, pid)
+      res.setInt(1, rid)
+      res.setInt(2, cid)
+      res.update(3, mat)
+      res
+    }
+  }
+
+  def rmmDuplicationLeft(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowNum: Int, rightColNum: Int): RDD[InternalRow] = {
+    val part = new RowPartitioner(n, leftRowNum)
+    val rightRDD = repartitionWithTargetPartitioner(part, right)
+    val dupRDD = BroadcastPartitions(left, n)
+
+    dupRDD.zipPartitions(rightRDD, preservesPartitioning = true) { case (iter1, iter2) =>
+      val leftBlocks = iter1.next()._2.toList
+      val rightBlocks = iter2.toList
+
+      val pid = rightBlocks.head._1
+
+      val res = findResultRMMLeft(pid, n, leftRowNum, rightColNum)
+      val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
+      res.par.map{ case (row, col) =>
+        leftBlocks.filter(row == _._1._1).map{ case a =>
+          rightBlocks.filter(col == _._2._1._2).filter(a._1._2 == _._2._1._1).map{ case b =>
+            if(!tmp.contains((row, col))){
+              tmp.put((row, col), Block.matrixMultiplication(
+                a._2, DMatrixSerializer.deserialize(b._2._2)))
+            } else {
+              tmp.put((row, col), Block.incrementalMultiply( a._2, DMatrixSerializer.deserialize(b._2._2), tmp.get((row, col)).get))
+            }
+          }
+        }
+      }
+      tmp.iterator
+    }.map{ row =>
+      val rid = row._1._1
+      val cid = row._1._2
+      val pid = part.getPartition((rid, cid))
+      val mat = row._2
+      val res = new GenericInternalRow(4)
+      res.setInt(0, pid)
+      res.setInt(1, rid)
+      res.setInt(2, cid)
+      res.update(3, mat)
+      res
+    }
+  }
+
+  private def findResultRMMRight(pid: Int, n: Int, rows: Int, cols: Int): scala.collection.mutable.HashSet[(Int, Int)] = {
+    val tmp = new mutable.HashSet[(Int, Int)]()
+
+    if(pid == -1){
+      tmp
+    } else{
+      val rowsInPartition = if(rows < n) rows else rows/n
+      val rowsBase = pid % n
+      val rowIndesList = (0 to rows -1).filter(rowsBase == _ / rowsInPartition)
+
+      rowIndesList.flatMap{ case row =>
+        (0 to cols-1).map{ case col =>
+            tmp += ((row+1, col+1))
+        }
+      }
+      tmp
+    }
+  }
+
+  private def findResultRMMLeft(pid: Int, n: Int, rows: Int, cols: Int): scala.collection.mutable.HashSet[(Int, Int)] = {
+    val tmp = new mutable.HashSet[(Int, Int)]()
+
+    if(pid == -1){
+      tmp
+    } else{
+      val colsInPartition = if(cols < n) cols else cols/n
+      val colsBase = pid % n
+      val colIndesList = (0 to rows -1).filter(colsBase == _ / colsInPartition)
+
+      colIndesList.flatMap{ case col =>
+        (0 to rows-1).map{ case row =>
+          tmp += ((row+1, col+1))
+        }
+      }
+      tmp
+    }
   }
 
   def multiplyOuterProductDuplicationLeft(n: Int, rdd1: RDD[InternalRow],
