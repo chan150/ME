@@ -6,7 +6,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.me.Serializer.DMatrixSerializer
 import org.apache.spark.sql.me.matrix._
-import org.apache.spark.sql.me.partitioner.{BroadcastPartitioner, ColumnPartitioner, IndexPartitioner, RowPartitioner}
+import org.apache.spark.sql.me.partitioner._
 
 import scala.collection.concurrent.TrieMap
 
@@ -16,9 +16,15 @@ object MeExecutionHelper {
     partitioner match {
       case idxPart:IndexPartitioner =>  idxPart.basePart match {
         case rowPart:RowPartitioner => RowPartitioner(rdd, rowPart.numPartitions, rowPart.numRowBlks)
+        case colPart:ColumnPartitioner => ColumnPartitioner(rdd, colPart.numPartitions, colPart.numColBlks)
+        case gridPart:GridPartitioner => GridPartitioner(rdd, gridPart.p, gridPart.q, gridPart.numRowBlks, gridPart.numColBlks)
         case _ => throw new IllegalArgumentException(s"Partitioner not recognized for $partitioner")
       }
       case rowPart:RowPartitioner => RowPartitioner(rdd, rowPart.numPartitions, rowPart.numRowBlks)
+
+      case colPart:ColumnPartitioner => ColumnPartitioner(rdd, colPart.numPartitions, colPart.numColBlks)
+
+      case gridPart:GridPartitioner => GridPartitioner(rdd, gridPart.p, gridPart.q, gridPart.numRowBlks, gridPart.numColBlks)
 
       case _ => throw new IllegalArgumentException(s"Partitioner not recognized for $partitioner")
     }
