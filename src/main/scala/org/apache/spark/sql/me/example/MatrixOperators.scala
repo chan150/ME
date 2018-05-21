@@ -28,64 +28,73 @@ object MatrixOperators {
     val b3 = new DenseMatrix(2, 2, Array[Double](3, 3, 4, 4))
     val s1 = new SparseMatrix(2, 2, Array[Int](0, 1, 2),
       Array[Int](1, 0), Array[Double](4, 2))
+
     val pid = -1
-    val seq1 = Seq(MatrixBlock(-1, 0, 0, b2), MatrixBlock(-1, 1, 1, b2)).toDS()
-    val seq2 = Seq(MatrixBlock(-1, 0, 0, b1), MatrixBlock(-1, 1, 1, b3)).toDS()
 
-    seq1.rdd.foreach{ case row =>
-      val idx = (row.rid, row.cid)
-      println(idx + ":")
-      println(row.matrix)
-    }
+    val A = Seq(MatrixBlock(-1, 0, 0, b2), MatrixBlock(-1, 1, 1, b2)).toDS()
+    val B = Seq(MatrixBlock(-1, 0, 0, b1), MatrixBlock(-1, 1, 1, b3)).toDS()
 
-    seq2.rdd.foreach{ case row =>
-      val idx = (row.rid, row.cid)
-      println(idx + ":")
-      println(row.matrix)
-    }
-
+//    seq1.rdd.foreach{ case row =>
+//      val idx = (row.rid, row.cid)
+//      println(idx + ":")
+//      println(row.matrix)
+//    }
+//
+//    seq2.rdd.foreach{ case row =>
+//      val idx = (row.rid, row.cid)
+//      println(idx + ":")
+//      println(row.matrix)
+//    }
     import spark.MeImplicits._
-    val divided = seq1.divideElement(2, 5, 4,4, seq2.transpose(),4,4,2)
+    val tmp = A.divideElement(2, 5, 4,4, B.transpose(),4,4,2)
+                .multiplyElement(2, 5, 4, 4, A, 4, 4, 2)
 
+    val tmp1 = A.matrixMultiply(2, 5, 4, 4, A.transpose(), 4, 4, 2)
+                    .addElement(2, 5, 4, 4, B, 4, 4, 2)
 
-    divided.rdd.foreach{ row =>
+    val result = tmp.matrixMultiply(2, 5, 4, 4, tmp1, 4, 4, 2)
+
+    result.explain()
+    result.explain(true)
+
+    result.rdd.foreach{ row =>
 
       val idx = (row.getInt(1), row.getInt(2))
 
       println(idx + ":")
       println(row.get(3).asInstanceOf[DistributedMatrix])
     }
-    println("matrix element-wise divide test")
-
-    val multiply = divided.multiplyElement(2, 5, 4, 4, seq1, 4, 4, 2)
-
-    multiply.rdd.foreach{ row =>
-      val idx = (row.getInt(1), row.getInt(2))
-
-      println(idx + ":")
-      println(row.get(3).asInstanceOf[DistributedMatrix])
-    }
-    println("matrix element-wise multiply test")
-    val add = multiply.addElement(2, 5, 4, 4, divided, 4, 4, 2)
-
-
-    add.rdd.foreach{ row =>
-      val idx = (row.getInt(1), row.getInt(2))
-
-      println(idx + ":")
-      println(row.get(3).asInstanceOf[DistributedMatrix])
-    }
-    println("matrix element-wise add test")
-    val MM = add.matrixMultiply(2, 5, 4, 4, multiply, 4, 4, 2)
-
-
-    MM.rdd.foreach{ row =>
-      val idx = (row.getInt(1), row.getInt(2))
-
-      println(idx + ":")
-      println(row.get(3).asInstanceOf[DistributedMatrix])
-    }
-    println("matrix multiplication test")
+//    println("matrix element-wise divide test")
+//
+//    val multiply = divided.multiplyElement(2, 5, 4, 4, seq1, 4, 4, 2)
+//
+//    multiply.rdd.foreach{ row =>
+//      val idx = (row.getInt(1), row.getInt(2))
+//
+//      println(idx + ":")
+//      println(row.get(3).asInstanceOf[DistributedMatrix])
+//    }
+//    println("matrix element-wise multiply test")
+//    val add = multiply.addElement(2, 5, 4, 4, divided, 4, 4, 2)
+//
+//
+//    add.rdd.foreach{ row =>
+//      val idx = (row.getInt(1), row.getInt(2))
+//
+//      println(idx + ":")
+//      println(row.get(3).asInstanceOf[DistributedMatrix])
+//    }
+//    println("matrix element-wise add test")
+//    val MM = add.matrixMultiply(2, 5, 4, 4, multiply, 4, 4, 2)
+//
+//
+//    MM.rdd.foreach{ row =>
+//      val idx = (row.getInt(1), row.getInt(2))
+//
+//      println(idx + ":")
+//      println(row.get(3).asInstanceOf[DistributedMatrix])
+//    }
+//    println("matrix multiplication test")
   }
 
   private def runMatrixTranspose(spark: MeSession): Unit = {
