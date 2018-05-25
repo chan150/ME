@@ -31,8 +31,8 @@ object MatrixOperators {
 
     val pid = -1
 
-    val A = Seq(MatrixBlock(-1, 0, 0, b2), MatrixBlock(-1, 1, 1, b2)).toDS()
-    val B = Seq(MatrixBlock(-1, 0, 0, b1), MatrixBlock(-1, 1, 1, b3)).toDS()
+    val A = Seq(MatrixBlock(-1, 0, 0, b2), MatrixBlock(-1, 1, 1, b2), MatrixBlock(-1, 1,0, b3), MatrixBlock(-1, 0, 1, b3)).toDS()
+    val B = Seq(MatrixBlock(-1, 0, 0, b1), MatrixBlock(-1, 0, 1, s1), MatrixBlock(-1, 1,0, b3), MatrixBlock(-1, 1, 1, b2)).toDS()
 
 //    seq1.rdd.foreach{ case row =>
 //      val idx = (row.rid, row.cid)
@@ -46,15 +46,14 @@ object MatrixOperators {
 //      println(row.matrix)
 //    }
     import spark.MeImplicits._
-    val tmp = A.divideElement(2, 5, 4,4, B.transpose(),4,4,2)
-                .multiplyElement(2, 5, 4, 4, A, 4, 4, 2)
+    val tmp = A.addElement(2, 5, 4,4, B.transpose(),4,4,2)
+                .matrixMultiply(2, 5, 4, 4, A, 4, 4, 2)
 
     val tmp1 = A.matrixMultiply(2, 5, 4, 4, A.transpose(), 4, 4, 2)
-                    .addElement(2, 5, 4, 4, B, 4, 4, 2)
+                    .matrixMultiply(2, 5, 4, 4, B, 4, 4, 2)
 
     val result = tmp.matrixMultiply(2, 5, 4, 4, tmp1, 4, 4, 2)
 
-    result.explain()
     result.explain(true)
 
     result.rdd.foreach{ row =>
