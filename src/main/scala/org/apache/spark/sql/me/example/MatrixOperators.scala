@@ -6,7 +6,16 @@ import org.apache.spark.sql.me.matrix._
 object MatrixOperators {
   def main(args: Array[String]): Unit = {
 
-    val meSession = MeSession.builder().master("local[2]").appName("SparkSessionForMe").getOrCreate()
+    val meSession = MeSession
+      .builder()
+//      .master("local[*]")
+      .master("spark://jupiter22:7077")
+      .appName("ME")
+        .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+        .config("spark.shuffle.consolidateFiles", "true")
+        .config("spark.shuffle.compress", "false")
+        .config("spark.rpc.message.maxSize", "1000")
+      .getOrCreate()
 
 
     runMatrixOpElements(meSession)
