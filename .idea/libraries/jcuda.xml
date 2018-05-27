@@ -1,0 +1,17 @@
+<component name="libraryTable">
+  <library name="jcuda">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/jcublas.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jcuda.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jcudnn.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jcufft.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jcurand.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jcusolver.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jcusparse.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jnvgraph.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/mavenized-jcuda-0.8.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
