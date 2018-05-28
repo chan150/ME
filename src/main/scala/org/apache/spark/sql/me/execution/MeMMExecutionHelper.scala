@@ -8,6 +8,10 @@ import org.apache.spark.sql.me.execution.MeExecutionHelper.{BroadcastPartitions,
 import org.apache.spark.sql.me.matrix.{Block, DistributedMatrix}
 import org.apache.spark.sql.me.partitioner._
 import org.apache.spark.Partitioner
+import jcuda.jcublas._
+import jcuda._
+import jcuda.jcublas._
+import jcuda.jcusparse._
 
 import scala.collection.mutable
 
