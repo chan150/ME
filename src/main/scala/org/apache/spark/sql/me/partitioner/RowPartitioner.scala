@@ -2,7 +2,7 @@ package org.apache.spark.sql.me.partitioner
 
 import org.apache.spark.rdd.{RDD, ShuffledRDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.me.Serializer.MeSerializer
+import org.apache.spark.sql.me.serializer.MeSerializer
 import org.apache.spark.{Partitioner, SparkConf}
 
 class RowPartitioner(n: Int, val numRowBlks:Long) extends Partitioner {

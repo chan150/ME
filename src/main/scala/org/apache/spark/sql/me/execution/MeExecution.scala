@@ -4,7 +4,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow}
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.me.Serializer.DMatrixSerializer
+import org.apache.spark.sql.me.serializer.DMatrixSerializer
 import org.apache.spark.sql.me.partitioner.RowPartitioner
 
 case class MatrixTransposeExecution(child: SparkPlan) extends MePlan {

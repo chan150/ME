@@ -3,7 +3,7 @@ package org.apache.spark.sql.me.matrix
 import java.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.me.Serializer.DMatrixSerializer
+import org.apache.spark.sql.me.serializer.DMatrixSerializer
 import org.apache.spark.sql.types._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}

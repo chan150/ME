@@ -4,7 +4,7 @@ import org.apache.spark.{Partitioner, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.me.Serializer.DMatrixSerializer
+import org.apache.spark.sql.me.serializer.DMatrixSerializer
 import org.apache.spark.sql.me.matrix._
 import org.apache.spark.sql.me.partitioner._
 
