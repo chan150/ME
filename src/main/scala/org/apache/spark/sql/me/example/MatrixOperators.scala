@@ -3,6 +3,8 @@ package org.apache.spark.sql.me.example
 import org.apache.spark.sql.me.MeSession
 import org.apache.spark.sql.me.matrix._
 
+
+
 object MatrixOperators {
   def main(args: Array[String]): Unit = {
 

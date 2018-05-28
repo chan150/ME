@@ -198,24 +198,31 @@ object MeExecutionHelper {
     }
 
     val resultRdd = rdd1.zipPartitions(rdd2, preservesPartitioning = true) { case (iter1, iter2) =>
-      val idx2val = new TrieMap[(Int, Int), InternalRow]()
-      val res = new TrieMap[(Int, Int), InternalRow]()
+      val buf = new TrieMap[(Int, Int), InternalRow]
 
-      for(elem <- iter1){
-        val key = elem._2._1
-        if(!idx2val.contains(key)) idx2val.putIfAbsent(key, elem._2._2)
-      }
-      for(elem <- iter2){
-        val key = elem._2._1
-        if(idx2val.contains(key)){
-          val tmp = idx2val.get(key).get
-          val product = DMatrixSerializer.serialize(
-            Block.add(DMatrixSerializer.deserialize(tmp),
-              DMatrixSerializer.deserialize(elem._2._2)))
-          res.putIfAbsent(key, product)
+      for(a <- iter1){
+        if (a != null){
+          val idx = a._2._1
+          if(!buf.contains(idx)) buf.putIfAbsent(idx, a._2._2)
+          else{
+            val old = buf.get(idx).get
+            val res = Block.add(DMatrixSerializer.deserialize(old), DMatrixSerializer.deserialize(a._2._2))
+            buf.put(idx, DMatrixSerializer.serialize(res))
+          }
         }
       }
-      res.iterator
+      for (b <- iter2){
+        if (b != null){
+          val idx = b._2._1
+          if(!buf.contains(idx)) buf.putIfAbsent(idx, b._2._2)
+          else{
+            val old = buf.get(idx).get
+            val res = Block.add(DMatrixSerializer.deserialize(old), DMatrixSerializer.deserialize(b._2._2))
+            buf.put(idx, DMatrixSerializer.serialize(res))
+          }
+        }
+      }
+      buf.iterator
     }
 
     resultRdd.map{ row =>

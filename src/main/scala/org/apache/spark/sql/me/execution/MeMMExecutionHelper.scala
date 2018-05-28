@@ -13,6 +13,9 @@ import jcuda._
 import jcuda.jcublas._
 import jcuda.jcusparse._
 
+import jcuda.jcudnn._
+
+
 import scala.collection.mutable
 
 object MeMMExecutionHelper {
@@ -110,6 +113,7 @@ object MeMMExecutionHelper {
       case _ => throw new IllegalArgumentException(s"Partitioner not recognized for $resultPart")
     }
   }
+
   def rmmDuplicationRight(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowNum: Int, rightColNum: Int): RDD[InternalRow] = {
     val part = new RowPartitioner(n, leftRowNum)
     val leftRDD = repartitionWithTargetPartitioner(part, left)
