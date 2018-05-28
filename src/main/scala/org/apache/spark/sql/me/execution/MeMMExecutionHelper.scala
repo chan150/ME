@@ -3,7 +3,7 @@ package org.apache.spark.sql.me.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.me.Serializer.DMatrixSerializer
+import org.apache.spark.sql.me.serializer.DMatrixSerializer
 import org.apache.spark.sql.me.execution.MeExecutionHelper.{BroadcastPartitions, repartitionWithTargetPartitioner}
 import org.apache.spark.sql.me.matrix.{Block, DistributedMatrix}
 import org.apache.spark.sql.me.partitioner._
@@ -23,6 +23,9 @@ object MeMMExecutionHelper {
   def cpmm(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowNum: Int, leftColNum: Int, rightRowNum: Int, rightColNum: Int, resultPart: Partitioner): RDD[InternalRow] = {
     val leftRDD = repartitionWithTargetPartitioner(new ColumnPartitioner(n, leftColNum), left)
     val rightRDD = repartitionWithTargetPartitioner(new RowPartitioner(n, rightRowNum), right)
+
+
+//    right.cartesian(left)
 
     val newBlocks =leftRDD.zipPartitions(rightRDD, preservesPartitioning = true){ case (iter1, iter2) =>
       val leftBlocks = iter1.toList

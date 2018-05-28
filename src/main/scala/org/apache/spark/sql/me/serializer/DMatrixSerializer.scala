@@ -1,4 +1,4 @@
-package org.apache.spark.sql.me.Serializer
+package org.apache.spark.sql.me.serializer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}

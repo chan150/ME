@@ -1,4 +1,4 @@
-package org.apache.spark.sql.me.Serializer
+package org.apache.spark.sql.me.serializer
 
 import java.math.BigDecimal
 import java.nio.ByteBuffer
