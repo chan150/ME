@@ -23,10 +23,6 @@ object MeMMExecutionHelper {
   def cpmm(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowNum: Int, leftColNum: Int, rightRowNum: Int, rightColNum: Int, resultPart: Partitioner): RDD[InternalRow] = {
     val leftRDD = repartitionWithTargetPartitioner(new ColumnPartitioner(n, leftColNum), left)
     val rightRDD = repartitionWithTargetPartitioner(new RowPartitioner(n, rightRowNum), right)
-
-
-//    right.cartesian(left)
-
     val newBlocks =leftRDD.zipPartitions(rightRDD, preservesPartitioning = true){ case (iter1, iter2) =>
       val leftBlocks = iter1.toList
       val rightBlocks = iter2.toList
@@ -54,6 +50,7 @@ object MeMMExecutionHelper {
 
     resultPart match {
       case rowPart:RowPartitioner =>
+
         newBlocks.map{ a =>
           val part = new RowPartitioner(n, leftRowNum)
           (part.getPartition(a._1), (a._1, a._2))
@@ -80,7 +77,7 @@ object MeMMExecutionHelper {
           res.setInt(0, pid)
           res.setInt(1, rid)
           res.setInt(2, cid)
-          res.update(3, mat)
+          res.update(3, DMatrixSerializer.serialize(mat))
           res
         }
       case colPart:ColumnPartitioner =>
@@ -110,15 +107,15 @@ object MeMMExecutionHelper {
           res.setInt(0, pid)
           res.setInt(1, rid)
           res.setInt(2, cid)
-          res.update(3, mat)
+          res.update(3, DMatrixSerializer.serialize(mat))
           res
         }
       case _ => throw new IllegalArgumentException(s"Partitioner not recognized for $resultPart")
     }
   }
 
-  def rmmDuplicationRight(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowNum: Int, rightColNum: Int): RDD[InternalRow] = {
-    val part = new RowPartitioner(n, leftRowNum)
+  def rmmDuplicationRight(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowBlkNum: Int, rightColBlkNum: Int): RDD[InternalRow] = {
+    val part = new RowPartitioner(n, leftRowBlkNum)
     val leftRDD = repartitionWithTargetPartitioner(part, left)
     val dupRDD = BroadcastPartitions(right, n)
 
@@ -128,7 +125,7 @@ object MeMMExecutionHelper {
 
       val pid = leftBlocks.head._1
 
-      val res = findResultRMMRight(pid, n, leftRowNum, rightColNum)
+      val res = findResultRMMRight(pid, n, leftRowBlkNum, rightColBlkNum)
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
       res.par.map{ case (row, col) =>
         leftBlocks.filter(row == _._2._1._1).map{ case a =>
@@ -152,13 +149,13 @@ object MeMMExecutionHelper {
       res.setInt(0, pid)
       res.setInt(1, rid)
       res.setInt(2, cid)
-      res.update(3, mat)
+      res.update(3, DMatrixSerializer.serialize(mat))
       res
     }
   }
 
-  def rmmDuplicationLeft(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowNum: Int, rightColNum: Int): RDD[InternalRow] = {
-    val part = new ColumnPartitioner(n, rightColNum)
+  def rmmDuplicationLeft(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowBlkNum: Int, rightColBlkNum: Int): RDD[InternalRow] = {
+    val part = new ColumnPartitioner(n, rightColBlkNum)
     val rightRDD = repartitionWithTargetPartitioner(part, right)
     val dupRDD = BroadcastPartitions(left, n)
 
@@ -168,7 +165,7 @@ object MeMMExecutionHelper {
 
       val pid = rightBlocks.head._1
 
-      val res = findResultRMMLeft(pid, n, leftRowNum, rightColNum)
+      val res = findResultRMMLeft(pid, n, leftRowBlkNum, rightColBlkNum)
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
       res.par.map{ case (row, col) =>
         leftBlocks.filter(row == _._1._1).map{ case a =>
@@ -192,7 +189,7 @@ object MeMMExecutionHelper {
       res.setInt(0, pid)
       res.setInt(1, rid)
       res.setInt(2, cid)
-      res.update(3, mat)
+      res.update(3, DMatrixSerializer.serialize(mat))
       res
     }
   }
@@ -209,7 +206,7 @@ object MeMMExecutionHelper {
 
       rowIndesList.flatMap{ case row =>
         (0 to cols-1).map{ case col =>
-          tmp += ((row+1, col+1))
+          tmp += ((row, col))
         }
       }
       tmp
@@ -228,7 +225,7 @@ object MeMMExecutionHelper {
 
       colIndesList.flatMap{ case col =>
         (0 to rows-1).map{ case row =>
-          tmp += ((row+1, col+1))
+          tmp += ((row, col))
         }
       }
       tmp
@@ -238,7 +235,7 @@ object MeMMExecutionHelper {
   private def findResultCPMM(rows: Int, cols: Int): scala.collection.mutable.HashSet[(Int, Int)] = {
     val tmp = new mutable.HashSet[(Int, Int)]()
 
-    (0 to rows-1).map(row => (0 to cols-1).map(col => tmp += ((row+1, col+1))))
+    (0 to rows-1).map(row => (0 to cols-1).map(col => tmp += ((row, col))))
 
     tmp
   }

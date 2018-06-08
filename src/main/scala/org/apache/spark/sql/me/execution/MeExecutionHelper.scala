@@ -7,6 +7,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.me.serializer.DMatrixSerializer
 import org.apache.spark.sql.me.matrix._
 import org.apache.spark.sql.me.partitioner._
+import org.apache.spark.broadcast.Broadcast
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -52,7 +53,7 @@ object MeExecutionHelper {
       res.setInt(0, pid)
       res.setInt(1, rid)
       res.setInt(2, cid)
-      res.update(3, mat)
+      res.update(3, DMatrixSerializer.serialize(mat))
       res
     }
   }
@@ -103,7 +104,7 @@ object MeExecutionHelper {
       res.setInt(0, pid)
       res.setInt(1, rid)
       res.setInt(2, cid)
-      res.update(3, mat)
+      res.update(3, DMatrixSerializer.serialize(mat))
       res
     }
   }
@@ -272,7 +273,7 @@ object MeExecutionHelper {
       res.setInt(0, pid)
       res.setInt(1, rid)
       res.setInt(2, cid)
-      res.update(3, mat)
+      res.update(3, DMatrixSerializer.serialize(mat))
       res
     }
   }
@@ -298,13 +299,13 @@ object MeExecutionHelper {
       res.setInt(0, pid)
       res.setInt(1, rid)
       res.setInt(2, cid)
-      res.update(3, mat)
+      res.update(3, DMatrixSerializer.serialize(mat))
       res
     }
   }
 
   def matrixMultiplyGeneral(rdd1: RDD[InternalRow],
-                            rdd2: RDD[InternalRow]): RDD[InternalRow] ={
+                            rdd2: RDD[InternalRow],  bc:Broadcast[scala.collection.mutable.HashMap[(Int, Int), Array[Int]]]): RDD[InternalRow] ={
     val leftRdd = rdd1.map{ row =>
       val rid = row.getInt(1)
       val cid = row.getInt(2)
@@ -315,15 +316,27 @@ object MeExecutionHelper {
       val rid = row.getInt(1)
       val cid = row.getInt(2)
       val mat = row.getStruct(3, 7)
-      (cid, (rid, mat))
+      (rid, (cid, mat))
     }.groupByKey()
 
     leftRdd.join(rightRdd).values.flatMap { case (iter1, iter2) =>
-        for(blk1 <- iter1; blk2 <- iter2)
+
+        val ne = for(blk1 <- iter1; blk2 <- iter2)
           yield ((blk1._1, blk2._1), Block.matrixMultiplication(
             DMatrixSerializer.deserialize(blk1._2),
             DMatrixSerializer.deserialize(blk2._2)
           ))
+//      var cnt = 0
+//      ne.map{ a =>
+//        val bcR = bc.value.getOrElse((0,0), new Array[Int](4))
+//        println(s"$cnt, key: ${a._1}, array: ")
+//        bcR.foreach(c => println(s"$c"))
+//        println(s"end")
+//        val neR = bcR.map(b => b+1)
+//        bc.value.put((0,0), neR)
+//        cnt += 1
+//      }
+      ne
     }.reduceByKey(Block.add(_, _)).map{ row =>
       val res = new GenericInternalRow(4)
       res.setInt(0, -1)

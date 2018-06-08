@@ -10,8 +10,8 @@ object MatrixOperators {
 
     val meSession = MeSession
       .builder()
-//      .master("local[*]")
-      .master("spark://jupiter22:7077")
+      .master("local[2]")
+//      .master("spark://jupiter22:7077")
       .appName("ME")
         .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         .config("spark.shuffle.consolidateFiles", "true")
@@ -24,6 +24,7 @@ object MatrixOperators {
 
 //    runMatrixTranspose(meSession)
 
+
     meSession.stop()
 
   }
@@ -33,6 +34,7 @@ object MatrixOperators {
 
   private def runMatrixOpElements(spark: MeSession): Unit = {
     import spark.implicits._
+
 
     val b1 = new DenseMatrix(2, 2, Array[Double](1, 1, 1, 1))
     val b2 = new DenseMatrix(2, 2, Array[Double](2, 2, 3, 3))
@@ -44,6 +46,8 @@ object MatrixOperators {
 
     val A = Seq(MatrixBlock(-1, 0, 0, b2), MatrixBlock(-1, 1, 1, b2), MatrixBlock(-1, 1,0, b3), MatrixBlock(-1, 0, 1, b3)).toDS()
     val B = Seq(MatrixBlock(-1, 0, 0, b1), MatrixBlock(-1, 0, 1, s1), MatrixBlock(-1, 1,0, b3), MatrixBlock(-1, 1, 1, b2)).toDS()
+
+
 
 //    seq1.rdd.foreach{ case row =>
 //      val idx = (row.rid, row.cid)
@@ -57,16 +61,17 @@ object MatrixOperators {
 //      println(row.matrix)
 //    }
     import spark.MeImplicits._
-    val tmp = A.addElement(2, 5, 4,4, B.transpose(),4,4,2)
-                .matrixMultiply(2, 5, 4, 4, A, 4, 4, 2)
+//    val tmp = A.addElement(2, 5, 4,4, B.transpose(),4,4,2)
+//                .matrixMultiply(2, 5, 4, 4, A, 4, 4, 2)
+//
+//    val tmp1 = A.matrixMultiply(2, 5, 4, 4, A.transpose(), 4, 4, 2)
+//                    .matrixMultiply(2, 5, 4, 4, B, 4, 4, 2)
 
-    val tmp1 = A.matrixMultiply(2, 5, 4, 4, A.transpose(), 4, 4, 2)
-                    .matrixMultiply(2, 5, 4, 4, B, 4, 4, 2)
-
-    val result = tmp.matrixMultiply(2, 5, 4, 4, tmp1, 4, 4, 2)
+    val result = A.matrixMultiply(2, 5, 4, 4, B, 4, 4, 2)
 
     result.explain(true)
 
+    println(result.rdd.partitions.size)
     result.rdd.foreach{ row =>
 
       val idx = (row.getInt(1), row.getInt(2))

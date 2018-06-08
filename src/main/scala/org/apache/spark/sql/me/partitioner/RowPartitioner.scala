@@ -13,8 +13,8 @@ class RowPartitioner(n: Int, val numRowBlks:Long) extends Partitioner {
 
   override def getPartition(key: Any): Int = {
     key match {
-      case (i: Int, j: Int) => ((i.toLong-1) /rowsInPartition).toInt
-      case (i: Int, j: Int, _: Int) => ((i.toLong-1) /rowsInPartition).toInt
+      case (i: Int, j: Int) => ((i.toLong) /rowsInPartition).toInt
+      case (i: Int, j: Int, _: Int) => ((i.toLong) /rowsInPartition).toInt
       case _=> throw new IllegalArgumentException(s"Unrecognized key: $key")
     }
   }

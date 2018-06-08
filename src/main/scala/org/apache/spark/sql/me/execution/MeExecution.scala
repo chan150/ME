@@ -7,6 +7,8 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.me.serializer.DMatrixSerializer
 import org.apache.spark.sql.me.partitioner.RowPartitioner
 
+import scala.collection.mutable
+
 case class MatrixTransposeExecution(child: SparkPlan) extends MePlan {
 
   override def output: Seq[Attribute] =  child.output
@@ -181,20 +183,33 @@ case class MatrixMatrixMultiplicationExecution(p:Int, q: Int,
       println(s"Caution: matrix multiplication result size = $memoryUsage GB")
     }
 
+    val bcV = mutable.HashMap[(Int, Int), Array[Int]]()
+
+    val bc = left.sqlContext.sparkSession.sparkContext.broadcast(bcV)
+
     val n = p * q
+    val leftRowBlkNum = math.ceil(leftRowNum * 1.0 / blkSize).toInt
     val leftColBlkNum = math.ceil(leftColNum * 1.0 / blkSize).toInt
+
     val rightRowBlkNum = math.ceil(rightRowNum * 1.0 / blkSize).toInt
+    val rightColBlkNum = math.ceil(rightColNum * 1.0 / blkSize).toInt
 
     if(leftColBlkNum == 1 && rightRowBlkNum == 1){
-      val leftRowBlkNum = (leftRowNum / blkSize).toInt
-      val rightColBlkNum = (rightColNum / blkSize).toInt
+
+
+
       if(leftRowBlkNum <= rightColBlkNum){
         MeExecutionHelper.multiplyOuterProductDuplicationLeft(n, left.execute(), right.execute(), rightColBlkNum)
       } else{
         MeExecutionHelper.multiplyOuterProductDuplicationRight(n, left.execute(), right.execute(), leftRowBlkNum)
       }
     } else {
-      MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute())
+//      MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
+//      MeMMExecutionHelper.rmmDuplicationLeft(2, left.execute(), right.execute(),leftRowBlkNum, rightColBlkNum)
+
+      MeMMExecutionHelper.rmmDuplicationRight(2, left.execute(), right.execute(),leftRowBlkNum, rightColBlkNum)
+
+//      MeMMExecutionHelper.cpmm(2, left.execute(), right.execute(),leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(2, leftRowBlkNum))
     }
   }
 }
