@@ -187,6 +187,19 @@ case class MatrixMatrixMultiplicationExecution(p:Int, q: Int,
 
     val bc = left.sqlContext.sparkSession.sparkContext.broadcast(bcV)
 
+    val option = "spark.default.parallelism"
+
+    val sc = left.sqlContext.sparkSession.sparkContext.getConf
+    sc.getAll.foreach(println)
+
+    sc.contains(option) match{
+     case true =>
+       println(s"$option:: ${sc.get(option)}")
+     case false =>
+       println(s"$option:: false")
+   }
+
+
     val n = p * q
     val leftRowBlkNum = math.ceil(leftRowNum * 1.0 / blkSize).toInt
     val leftColBlkNum = math.ceil(leftColNum * 1.0 / blkSize).toInt
@@ -195,8 +208,6 @@ case class MatrixMatrixMultiplicationExecution(p:Int, q: Int,
     val rightColBlkNum = math.ceil(rightColNum * 1.0 / blkSize).toInt
 
     if(leftColBlkNum == 1 && rightRowBlkNum == 1){
-
-
 
       if(leftRowBlkNum <= rightColBlkNum){
         MeExecutionHelper.multiplyOuterProductDuplicationLeft(n, left.execute(), right.execute(), rightColBlkNum)
