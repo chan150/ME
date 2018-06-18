@@ -10,15 +10,15 @@ object MatrixOperators {
 
     val meSession = MeSession
       .builder()
-      .master("local[2]")
-//      .master("spark://jupiter22:7077")
+//      .master("local[2]")
+      .master("spark://jupiter22:7077")
       .appName("ME")
         .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         .config("spark.shuffle.consolidateFiles", "true")
         .config("spark.shuffle.compress", "false")
         .config("spark.rpc.message.maxSize", "1000")
-        .config("spark.executor.cores", 2)
-        .config("spark.nodes", 1)
+        .config("spark.locality.wait", "0s")
+        .config("spark.task.cpus", "2")
       .getOrCreate()
 
 
@@ -73,7 +73,7 @@ object MatrixOperators {
     result.explain(true)
 
 //    println(result.rdd.partitions.size)
-    result.rdd.foreach{ row =>
+    result.rdd.collect().foreach{ row =>
 
       val idx = (row.getInt(1), row.getInt(2))
 
