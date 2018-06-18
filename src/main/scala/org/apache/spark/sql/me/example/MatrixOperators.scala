@@ -17,6 +17,8 @@ object MatrixOperators {
         .config("spark.shuffle.consolidateFiles", "true")
         .config("spark.shuffle.compress", "false")
         .config("spark.rpc.message.maxSize", "1000")
+        .config("spark.executor.cores", 2)
+        .config("spark.nodes", 1)
       .getOrCreate()
 
 
@@ -42,7 +44,6 @@ object MatrixOperators {
     val s1 = new SparseMatrix(2, 2, Array[Int](0, 1, 2),
       Array[Int](1, 0), Array[Double](4, 2))
 
-    val pid = -1
 
     val A = Seq(MatrixBlock(-1, 0, 0, b2), MatrixBlock(-1, 1, 1, b2), MatrixBlock(-1, 1,0, b3), MatrixBlock(-1, 0, 1, b3)).toDS()
     val B = Seq(MatrixBlock(-1, 0, 0, b1), MatrixBlock(-1, 0, 1, s1), MatrixBlock(-1, 1,0, b3), MatrixBlock(-1, 1, 1, b2)).toDS()
@@ -71,7 +72,7 @@ object MatrixOperators {
 
     result.explain(true)
 
-    println(result.rdd.partitions.size)
+//    println(result.rdd.partitions.size)
     result.rdd.foreach{ row =>
 
       val idx = (row.getInt(1), row.getInt(2))
