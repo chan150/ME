@@ -207,9 +207,9 @@ case class MatrixMatrixMultiplicationExecution(p:Int, q: Int,
 //      MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
 //      MeMMExecutionHelper.rmmDuplicationLeft(2, left.execute(), right.execute(),leftRowBlkNum, rightColBlkNum)
 
-//      MeMMExecutionHelper.rmmDuplicationRight(2, left.execute(), right.execute(),leftRowBlkNum, rightColBlkNum)
+      MeMMExecutionHelper.rmmDuplicationRight(2, left.execute(), right.execute(),leftRowBlkNum, rightColBlkNum)
 
-      MeMMExecutionHelper.cpmm(2, left.execute(), right.execute(),leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(n, leftRowBlkNum))
+//      MeMMExecutionHelper.cpmm(2, left.execute(), right.execute(),leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(2, leftRowBlkNum))
     }
   }
 }

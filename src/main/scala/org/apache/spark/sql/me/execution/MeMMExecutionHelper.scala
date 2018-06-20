@@ -20,6 +20,39 @@ import scala.collection.mutable
 
 object MeMMExecutionHelper {
 
+  def rmmWithoutPartition(left: RDD[InternalRow], right: RDD[InternalRow], leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int): RDD[InternalRow] ={
+    val leftRDD = left.flatMap{ row =>
+      val i = row.getInt(1)
+      val k = row.getInt(2)
+      val matrix = row.getStruct(3, 7)
+
+      (0 to rightColBlkNum).map(j => ((i, j, k), matrix))
+    }
+
+    val rightRDD = right.flatMap{ row =>
+      val k = row.getInt(1)
+      val j = row.getInt(2)
+      val matrix = row.getStruct(3, 7)
+
+      (0 to leftRowBlkNum).map(i => ((i, j, k), matrix))
+    }
+
+    leftRDD.join(rightRDD).map{ case ((i, j, k), (a, b)) =>
+      ((i, j), Block.matrixMultiplication(DMatrixSerializer.deserialize(a),DMatrixSerializer.deserialize(b)))
+    }.reduceByKey{(a, b) => Block.add(a, b)}.map{ row =>
+      val rid = row._1._1
+      val cid = row._1._2
+      val pid = -1
+      val mat = row._2
+      val res = new GenericInternalRow(4)
+      res.setInt(0, pid)
+      res.setInt(1, rid)
+      res.setInt(2, cid)
+      res.update(3, DMatrixSerializer.serialize(mat))
+      res
+    }
+  }
+
   def cpmm(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowNum: Int, leftColNum: Int, rightRowNum: Int, rightColNum: Int, resultPart: Partitioner): RDD[InternalRow] = {
     val leftRDD = repartitionWithTargetPartitioner(new ColumnPartitioner(n, leftColNum), left)
     val rightRDD = repartitionWithTargetPartitioner(new RowPartitioner(n, rightRowNum), right)

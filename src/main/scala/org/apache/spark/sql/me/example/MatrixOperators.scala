@@ -67,10 +67,11 @@ object MatrixOperators {
 //    val tmp1 = A.matrixMultiply(2, 5, 4, 4, A.transpose(), 4, 4, 2)
 //                    .matrixMultiply(2, 5, 4, 4, B, 4, 4, 2)
 
-    val result = A.matrixMultiply(2, 1, 4, 4, B, 4, 4, 2)
+    val result = A.matrixMultiply(2, 5, 4, 4, B, 4, 4, 2)
 
     result.explain(true)
 
+    println(result.rdd.partitions.size)
     result.rdd.foreach{ row =>
 
       val idx = (row.getInt(1), row.getInt(2))
