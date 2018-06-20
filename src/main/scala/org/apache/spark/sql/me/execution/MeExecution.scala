@@ -187,6 +187,28 @@ case class MatrixMatrixMultiplicationExecution(p:Int, q: Int,
 
     val bc = left.sqlContext.sparkSession.sparkContext.broadcast(bcV)
 
+    val option = "spark.default.parallelism"
+
+    val sc = left.sqlContext.sparkSession.sparkContext.getConf
+    sc.getAll.foreach(println)
+
+    sc.contains(option) match{
+      case true =>
+        println(s"$option:: ${sc.get(option)}")
+      case false =>
+        println(s"$option:: false")
+    }
+
+    //    println(left.sqlContext.sparkSession.sparkContext.statusTracker.getExecutorInfos.length)
+    val execute = left.sqlContext.sparkSession.sparkContext.statusTracker.getExecutorInfos
+    println(execute.length)
+
+    println(s"default parallelism: ${left.sqlContext.sparkSession.sparkContext.defaultParallelism}")
+    left.sqlContext.sparkSession.sparkContext.getExecutorIds().foreach(println)
+
+    execute.distinct.foreach(a => println(s"${a.host()}"))
+
+
     val n = p * q
     val leftRowBlkNum = math.ceil(leftRowNum * 1.0 / blkSize).toInt
     val leftColBlkNum = math.ceil(leftColNum * 1.0 / blkSize).toInt
@@ -207,9 +229,9 @@ case class MatrixMatrixMultiplicationExecution(p:Int, q: Int,
 //      MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
 //      MeMMExecutionHelper.rmmDuplicationLeft(2, left.execute(), right.execute(),leftRowBlkNum, rightColBlkNum)
 
-      MeMMExecutionHelper.rmmDuplicationRight(2, left.execute(), right.execute(),leftRowBlkNum, rightColBlkNum)
+//      MeMMExecutionHelper.rmmDuplicationRight(2, left.execute(), right.execute(),leftRowBlkNum, rightColBlkNum)
 
-//      MeMMExecutionHelper.cpmm(2, left.execute(), right.execute(),leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(2, leftRowBlkNum))
+      MeMMExecutionHelper.cpmm(2, left.execute(), right.execute(),leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(n, leftRowBlkNum))
     }
   }
 }

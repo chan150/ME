@@ -1,5 +1,7 @@
 package org.apache.spark.sql.me.example
 
+import java.util.Random
+
 import org.apache.spark.sql.me.MeSession
 import org.apache.spark.sql.me.matrix._
 
@@ -10,13 +12,17 @@ object MatrixOperators {
 
     val meSession = MeSession
       .builder()
-      .master("local[2]")
-//      .master("spark://jupiter22:7077")
+//      .master("local[*]")
+      .master("spark://jupiter22:7077")
       .appName("ME")
         .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         .config("spark.shuffle.consolidateFiles", "true")
         .config("spark.shuffle.compress", "false")
         .config("spark.rpc.message.maxSize", "1000")
+        .config("spark.locality.wait", "0s")
+        .config("spark.task.cpus", "6")
+//      .config("spark.executor.cores", "6")
+//      .config("spark.executor.memory", "60g")
       .getOrCreate()
 
 
@@ -42,10 +48,21 @@ object MatrixOperators {
     val s1 = new SparseMatrix(2, 2, Array[Int](0, 1, 2),
       Array[Int](1, 0), Array[Double](4, 2))
 
-    val pid = -1
+    val b4 = SparseMatrix.sprand(1000, 1000, 0.01, new Random)
 
-    val A = Seq(MatrixBlock(-1, 0, 0, b2), MatrixBlock(-1, 1, 1, b2), MatrixBlock(-1, 1,0, b3), MatrixBlock(-1, 0, 1, b3)).toDS()
-    val B = Seq(MatrixBlock(-1, 0, 0, b1), MatrixBlock(-1, 0, 1, s1), MatrixBlock(-1, 1,0, b3), MatrixBlock(-1, 1, 1, b2)).toDS()
+    val A = Seq(
+      MatrixBlock(-1, 0, 0, b4), MatrixBlock(-1, 0, 1, b4), MatrixBlock(-1, 0, 2, b4), MatrixBlock(-1, 0, 3, b4),
+      MatrixBlock(-1, 1, 0, b4), MatrixBlock(-1, 1, 1, b4), MatrixBlock(-1, 1, 2, b4), MatrixBlock(-1, 1, 3, b4),
+      MatrixBlock(-1, 2, 0, b4), MatrixBlock(-1, 2, 1, b4), MatrixBlock(-1, 2, 2, b4), MatrixBlock(-1, 2, 3, b4),
+      MatrixBlock(-1, 3, 0, b4), MatrixBlock(-1, 3, 1, b4), MatrixBlock(-1, 3, 2, b4), MatrixBlock(-1, 3, 3, b4)
+    ).toDS()
+    val B = Seq(
+      MatrixBlock(-1, 0, 0, b4), MatrixBlock(-1, 0, 1, b4), MatrixBlock(-1, 0, 2, b4), MatrixBlock(-1, 0, 3, b4),
+      MatrixBlock(-1, 1, 0, b4), MatrixBlock(-1, 1, 1, b4), MatrixBlock(-1, 1, 2, b4), MatrixBlock(-1, 1, 3, b4),
+      MatrixBlock(-1, 2, 0, b4), MatrixBlock(-1, 2, 1, b4), MatrixBlock(-1, 2, 2, b4), MatrixBlock(-1, 2, 3, b4),
+      MatrixBlock(-1, 3, 0, b4), MatrixBlock(-1, 3, 1, b4), MatrixBlock(-1, 3, 2, b4), MatrixBlock(-1, 3, 3, b4)
+
+    ).toDS()
 
 
 
@@ -67,18 +84,20 @@ object MatrixOperators {
 //    val tmp1 = A.matrixMultiply(2, 5, 4, 4, A.transpose(), 4, 4, 2)
 //                    .matrixMultiply(2, 5, 4, 4, B, 4, 4, 2)
 
-    val result = A.matrixMultiply(2, 5, 4, 4, B, 4, 4, 2)
+   
+    val result = A.matrixMultiply(2, 5, 4000, 4000, B, 4000, 4000, 1000)
 
     result.explain(true)
 
-    println(result.rdd.partitions.size)
-    result.rdd.foreach{ row =>
-
-      val idx = (row.getInt(1), row.getInt(2))
-
-      println(idx + ":")
-      println(row.get(3).asInstanceOf[DistributedMatrix])
-    }
+    result.rdd.count()
+//    println(result.rdd.partitions.size)
+//    result.rdd.collect().foreach{ row =>
+//
+//      val idx = (row.getInt(1), row.getInt(2))
+//
+//      println(idx + ":")
+//      println(row.get(3).asInstanceOf[DistributedMatrix])
+//    }
 //    println("matrix element-wise divide test")
 //
 //    val multiply = divided.multiplyElement(2, 5, 4, 4, seq1, 4, 4, 2)

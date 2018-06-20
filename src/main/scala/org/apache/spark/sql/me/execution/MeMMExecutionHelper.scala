@@ -154,9 +154,10 @@ object MeMMExecutionHelper {
 
     leftRDD.zipPartitions(dupRDD, preservesPartitioning = true) { case (iter1, iter2) =>
       val leftBlocks = iter1.toList
-      val rightBlocks = iter2.next()._2.toList
+      val temp = iter2.next()
+      val rightBlocks = temp._2.toList
 
-      val pid = leftBlocks.head._1
+      val pid = temp._1
 
       val res = findResultRMMRight(pid, n, leftRowBlkNum, rightColBlkNum)
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
@@ -193,10 +194,11 @@ object MeMMExecutionHelper {
     val dupRDD = BroadcastPartitions(left, n)
 
     dupRDD.zipPartitions(rightRDD, preservesPartitioning = true) { case (iter1, iter2) =>
-      val leftBlocks = iter1.next()._2.toList
+      val temp = iter1.next()
+      val leftBlocks = temp._2.toList
       val rightBlocks = iter2.toList
 
-      val pid = rightBlocks.head._1
+      val pid = temp._1
 
       val res = findResultRMMLeft(pid, n, leftRowBlkNum, rightColBlkNum)
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
