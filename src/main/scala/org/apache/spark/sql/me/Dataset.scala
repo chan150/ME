@@ -10,19 +10,23 @@ import org.apache.spark.sql.me.optimizer._
 class Dataset[T] private[me] (@transient val meSession: me.MeSession,
                               @transient override val queryExecution: QueryExecution,
                               encoder: Encoder[T]) extends SQLDataset[T](meSession, queryExecution.logical, encoder){
+
+
+
   def this(sparkSession: me.MeSession, logicalPlan: LogicalPlan, encoder: Encoder[T]) ={
     this(sparkSession, sparkSession.sessionState.executePlan(logicalPlan), encoder)
   }
+
 
   def transpose(data: Seq[Attribute] = this.queryExecution.analyzed.output): DataFrame = withPlan{
     TransposeOperator(this.logicalPlan)
   }
 
-  def matrixMultiply(p:Int, q: Int,
+  def matrixMultiply(
                      leftRowNum: Long, leftColNum: Long,
                      right: Dataset[_], rightRowNum: Long, rightColNum: Long,
                      blkSize: Int, data: Seq[Attribute] = this.queryExecution.analyzed.output): DataFrame = withPlan {
-    MatrixMatrixMultiplicationOperator(p, q, this.logicalPlan, leftRowNum, leftColNum, right.logicalPlan, rightRowNum, rightColNum, blkSize)
+    MatrixMatrixMultiplicationOperator(this.logicalPlan, leftRowNum, leftColNum, right.logicalPlan, rightRowNum, rightColNum, blkSize)
   }
 
   def divideElement(p:Int, q: Int,

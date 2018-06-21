@@ -62,9 +62,13 @@ object MeMMExecutionHelper {
       val res = findResultCPMM(leftRowNum, rightColNum)
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
 
-      res.par.map{ case (row, col) =>
+      var count = 0
+      res.map{ case (row, col) =>
         leftBlocks.filter(row == _._2._1._1).map{ case a =>
           rightBlocks.filter(col == _._2._1._2).filter(a._2._1._2 == _._2._1._1).map{ case b =>
+
+            println(s"${b._1}, key: ($row, $col), $count")
+
             if(!tmp.contains((row, col))){
               tmp.put((row, col), Block.matrixMultiplication(
                 DMatrixSerializer.deserialize(a._2._2),
@@ -75,6 +79,8 @@ object MeMMExecutionHelper {
                 DMatrixSerializer.deserialize(b._2._2),
                 tmp.get((row, col)).get))
             }
+
+              count = count + 1
           }
         }
       }
@@ -90,7 +96,7 @@ object MeMMExecutionHelper {
         }.groupByKey(new IndexPartitioner(n, new RowPartitioner(n, leftRowNum))).flatMap{ case (pid, blk) =>
           val CPagg = findResultRMMRight(pid, n, leftRowNum, rightColNum)
           val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
-          CPagg.par.map{ case (row, col) =>
+          CPagg.map{ case (row, col) =>
             blk.filter((row, col) == _._1).map{ case (idx, mat) =>
               if(!tmp.contains((row, col))){
                 tmp.put((row, col), mat)
@@ -120,7 +126,7 @@ object MeMMExecutionHelper {
         }.groupByKey(new IndexPartitioner(n, new RowPartitioner(n, leftRowNum))).flatMap{ case (pid, blk) =>
           val CPagg = findResultRMMLeft(pid, n, leftRowNum, rightColNum)
           val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
-          CPagg.par.map{ case (row, col) =>
+          CPagg.map{ case (row, col) =>
             blk.filter((row, col) == _._1).map{ case (idx, mat) =>
               if(!tmp.contains((row, col))){
                 tmp.put((row, col), mat)
@@ -161,7 +167,7 @@ object MeMMExecutionHelper {
 
       val res = findResultRMMRight(pid, n, leftRowBlkNum, rightColBlkNum)
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
-      res.par.map{ case (row, col) =>
+      res.map{ case (row, col) =>
         leftBlocks.filter(row == _._2._1._1).map{ case a =>
           rightBlocks.filter(col == _._1._2).filter(a._2._1._2 == _._1._1).map{ case b =>
             if(!tmp.contains((row, col))){
@@ -202,7 +208,7 @@ object MeMMExecutionHelper {
 
       val res = findResultRMMLeft(pid, n, leftRowBlkNum, rightColBlkNum)
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
-      res.par.map{ case (row, col) =>
+      res.map{ case (row, col) =>
         leftBlocks.filter(row == _._1._1).map{ case a =>
           rightBlocks.filter(col == _._2._1._2).filter(a._1._2 == _._2._1._1).map{ case b =>
             if(!tmp.contains((row, col))){

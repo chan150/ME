@@ -8,6 +8,8 @@ case class TransposeOperator(child: LogicalPlan) extends UnaryNode{
   override def output: Seq[Attribute] = child.output
 }
 
+
+
 case class MatrixScalarAddOperator(child: LogicalPlan, scalar: Double) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
@@ -55,7 +57,7 @@ case class MatrixElementDivideOperator(p:Int, q: Int,
   override def right: LogicalPlan = rightChild
 }
 
-case class MatrixMatrixMultiplicationOperator(p:Int, q: Int,
+case class MatrixMatrixMultiplicationOperator(
                                               leftChild: LogicalPlan,
                                               leftRowNum: Long,
                                               leftColNum: Long,

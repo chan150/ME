@@ -15,8 +15,8 @@ class ColumnPartitioner(n: Int, val numColBlks:Long) extends Partitioner {
 
   override def getPartition(key: Any): Int = {
     key match {
-      case (i: Int, j: Int) => ((j.toLong) /rowsInPartition).toInt
-      case (i: Int, j: Int, _: Int) => ((j.toLong) /rowsInPartition).toInt
+      case (i: Int, j: Int) => ((j.toLong) %numPartitions).toInt
+      case (i: Int, j: Int, _: Int) => ((j.toLong) %numPartitions).toInt
       case _=> throw new IllegalArgumentException(s"Unrecognized key: $key")
     }
   }
