@@ -189,7 +189,8 @@ case class MatrixMatrixMultiplicationExecution(
     val blkMemorySize = (blkSize * blkSize * 8) / (1024 * 1024 * 1024 * 1.0)
     val limitNumBlk = (2 / blkMemorySize).toInt
 
-    println(s"the memory size of a block: $blkMemorySize GB, limitation of number of block : $limitNumBlk")
+    println(s"the memory size of a block: $blkMemorySize GB")
+    println(s"the limitation for the number of block in a partition of RDD: $limitNumBlk")
 
     val bcV = mutable.HashMap[(Int, Int), Array[Int]]()
 
@@ -252,11 +253,6 @@ case class MatrixMatrixMultiplicationExecution(
     //      }
     //    } else {
     ////      MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
-    //      MeMMExecutionHelper.rmmDuplicationLeft(n, left.execute(), right.execute(),leftRowBlkNum, rightColBlkNum)
-    //
-    ////      MeMMExecutionHelper.rmmDuplicationRight(n, left.execute(), right.execute(),leftRowBlkNum, rightColBlkNum)
-    //
-    ////      MeMMExecutionHelper.cpmm(n, left.execute(), right.execute(),leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(n, leftRowBlkNum))
     //    }
 
     if (leftTotalBlkNum <= limitNumBlk && leftTotalBlkNum <= rightTotalBlkNum) {
