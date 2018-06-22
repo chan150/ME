@@ -199,6 +199,9 @@ case class MatrixMatrixMultiplicationExecution(p:Int, q: Int,
        println(s"$option:: false")
    }
 
+    println(left.sqlContext.sparkSession.sparkContext.statusTracker.getExecutorInfos.length)
+
+    left.sqlContext.sparkSession.sparkContext.statusTracker.getExecutorInfos.foreach(a => println(a.host()))
 
     val n = p * q
     val leftRowBlkNum = math.ceil(leftRowNum * 1.0 / blkSize).toInt

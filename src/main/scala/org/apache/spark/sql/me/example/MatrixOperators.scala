@@ -13,12 +13,12 @@ object MatrixOperators {
 //      .master("local[2]")
       .master("spark://jupiter22:7077")
       .appName("ME")
-        .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-        .config("spark.shuffle.consolidateFiles", "true")
-        .config("spark.shuffle.compress", "false")
-        .config("spark.rpc.message.maxSize", "1000")
-        .config("spark.locality.wait", "0s")
-        .config("spark.task.cpus", "2")
+      .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .config("spark.shuffle.consolidateFiles", "true")
+      .config("spark.shuffle.compress", "false")
+      .config("spark.rpc.message.maxSize", "1000")
+      .config("spark.locality.wait", "0s")
+      .config("spark.task.cpus", "2")
       .getOrCreate()
 
 
