@@ -5,6 +5,7 @@ import java.util.Random
 import org.apache.spark.sql.me.MeSession
 import org.apache.spark.sql.me.matrix._
 
+import org.apache.spark.sql.me.partitioner.{IndexPartitioner, RedunColPartitioner, RedunRowPartitioner, RowPartitioner}
 
 
 object MatrixOperators {
@@ -59,13 +60,13 @@ object MatrixOperators {
 //    ).toDS()
 
 
-    val leftRowBlkNum = 100
-    val leftColBlkNum = 100
+    val leftRowBlkNum = 10
+    val leftColBlkNum = 10
 
 
 
     val rightRowBlkNum = leftColBlkNum
-    val rightColBlkNum = 100
+    val rightColBlkNum = 10
     val blkSize = 1000
 
     val leftRowNum = leftRowBlkNum * blkSize
@@ -75,12 +76,12 @@ object MatrixOperators {
     val rightColNum = rightColBlkNum * blkSize
 
 
-    val A = spark.sparkContext.parallelize(for(i <- 0 until leftRowBlkNum; j <- 0 until leftColBlkNum) yield (i, j), 30)
+    val A = spark.sparkContext.parallelize(for(i <- 0 until leftRowBlkNum; j <- 0 until leftColBlkNum) yield (i, j),60)
       .map(coord =>  MatrixBlock(-1, coord._1, coord._2, b4)).toDS()
 
 
 
-    val B = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j), 30)
+    val B = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j),60)
       .map(coord =>  MatrixBlock(-1, coord._1, coord._2, b4)).toDS()
 
 
@@ -103,13 +104,17 @@ object MatrixOperators {
 //    val tmp1 = A.matrixMultiply(2, 5, 4, 4, A.transpose(), 4, 4, 2)
 //                    .matrixMultiply(2, 5, 4, 4, B, 4, 4, 2)
 
-
    
     val result = A.matrixMultiply(leftRowNum, leftColNum, B, rightRowNum, rightColNum, blkSize)
 
-//    result.explain(true)
 
-    println(result.rdd.count())
+
+
+    val C = result.matrixMultiply(leftRowNum, rightColNum, B, rightRowNum, rightColNum, blkSize)
+
+//    C .explain(true)
+
+    println(C.rdd.count())
 //    println(result.rdd.partitions.size)
 //    result.rdd.collect().foreach{ row =>
 //

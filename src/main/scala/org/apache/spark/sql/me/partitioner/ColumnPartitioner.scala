@@ -10,13 +10,13 @@ import org.apache.spark.{Partitioner, SparkConf}
 class ColumnPartitioner(n: Int, val numColBlks:Long) extends Partitioner {
   require(n >= 0, s"Number of partitions cannot be negative but found $n")
 
-  val rowsInPartition = if(numColBlks < n) numColBlks else numColBlks/n
+  val colsInPartition = if(numColBlks < n) numColBlks.toDouble else ((numColBlks*1.0)/(n * 1.0))
   override val numPartitions = n
 
   override def getPartition(key: Any): Int = {
     key match {
-      case (i: Int, j: Int) => ((j.toLong) %numPartitions).toInt
-      case (i: Int, j: Int, _: Int) => ((j.toLong) %numPartitions).toInt
+      case (i: Int, j: Int) => Math.floor(j * 1.0 /(colsInPartition*1.0)).toInt
+      case (i: Int, j: Int, _: Int) => Math.floor(j * 1.0 /(colsInPartition*1.0)).toInt
       case _=> throw new IllegalArgumentException(s"Unrecognized key: $key")
     }
   }

@@ -2,10 +2,11 @@ package org.apache.spark.sql.me.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, GenericInternalRow}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.me.serializer.DMatrixSerializer
-import org.apache.spark.sql.me.partitioner.RowPartitioner
+import org.apache.spark.sql.me.partitioner.{IndexPartitioner, RedunColPartitioner, RedunRowPartitioner, RowPartitioner}
+import org.apache.spark.sql.types.DataType
 
 import scala.collection.mutable
 
@@ -92,6 +93,7 @@ case class MatrixElementMultiplyExecution(p:Int, q: Int,
 
   override def children: Seq[SparkPlan] = Seq(left, right)
 
+
   protected override def doExecute(): RDD[InternalRow] = {
     require(leftRowNum == rightRowNum, s"Row number not match, leftRowNum = $leftRowNum, rightRowNum = $rightRowNum")
     require(leftColNum == rightColNum, s"Row number not match, leftRowNum = $leftColNum, rightRowNum = $rightColNum")
@@ -163,6 +165,16 @@ case class MatrixElementAddExecution(p:Int, q: Int,
     }
   }
 }
+//
+//trait MetadataExec extends UnaryExecNode {
+//  assert(child.output.length == 1)
+//
+//  // This operator always need all columns of its child, even it doesn't reference to.
+//  override def references: AttributeSet = child.outputSet
+//
+//  def inputObjectType: DataType = child.output.head.dataType
+//}
+
 
 case class MatrixMatrixMultiplicationExecution(
                                                left: SparkPlan,
@@ -177,6 +189,8 @@ case class MatrixMatrixMultiplicationExecution(
 
   override def children: Seq[SparkPlan] = Seq (left, right)
 
+  override def metadata: Map[String, String] = right.metadata ++ left.metadata ++ Map("part" -> "grid")
+
   protected override def doExecute(): RDD[InternalRow] = {
     require(leftColNum == rightRowNum, s"Matrix dimension not match, leftColNum = $leftColNum, rightRowNum =$rightRowNum")
 
@@ -185,6 +199,8 @@ case class MatrixMatrixMultiplicationExecution(
     if (memoryUsage > 10) {
       println(s"Caution: matrix multiplication result size = $memoryUsage GB")
     }
+
+    org.apache.spark.sql.execution.CoGroupExec
 
     val blkMemorySize = (blkSize * blkSize * 8) / (1024 * 1024 * 1024 * 1.0)
     val limitNumBlk = (2 / blkMemorySize).toInt
@@ -244,6 +260,21 @@ case class MatrixMatrixMultiplicationExecution(
     println(s"righ: ($rightRowNum, $rightColNum), blkSize: $blkSize")
     println(s"memoryExecutor/nodeParallelism: ${memoryExecutor/nodeParallelism}")
 
+
+    println(s"metadata size: ${metadata.size}")
+    metadata.foreach(println)
+
+
+    val matA = left.execute()
+    val matB = right.execute()
+
+    if(matA.partitioner != None) {
+      matA.partitioner.get.toString
+    }
+
+    if(matB.partitioner != None) {
+      matB.partitioner.get.toString
+    }
     //    if(leftColBlkNum == 1 && rightRowBlkNum == 1){
     //
     //      if(leftRowBlkNum <= rightColBlkNum){
@@ -255,24 +286,29 @@ case class MatrixMatrixMultiplicationExecution(
     ////      MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
     //    }
 
-    if (leftTotalBlkNum <= limitNumBlk && leftTotalBlkNum <= rightTotalBlkNum) {
-      val n = if (TaskParallelism > rightColBlkNum) rightColBlkNum else TaskParallelism
-      println(s"In rmmDuplicationLeft, n: $n")
-
-      MeMMExecutionHelper.rmmDuplicationLeft(n, left.execute(), right.execute(), leftRowBlkNum, rightColBlkNum)
-    } else if (rightTotalBlkNum <= limitNumBlk && leftTotalBlkNum > rightTotalBlkNum) {
-
-      val n = if (TaskParallelism > leftRowBlkNum) leftRowBlkNum else TaskParallelism
-      println(s"In rmmDuplicationRight, n: $n")
-
-      MeMMExecutionHelper.rmmDuplicationRight(n, left.execute(), right.execute(), leftRowBlkNum, rightColBlkNum)
-    } else if(leftColBlkNum <= limitNumBlk && rightRowBlkNum <= limitNumBlk && memoryUsage < (memoryExecutor/nodeParallelism)){
-      val n = if (TaskParallelism > leftRowBlkNum) leftRowBlkNum else TaskParallelism
-      println(s"In cpmm, n: $n")
-      MeMMExecutionHelper.cpmm(n, left.execute(), right.execute(),leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(n, leftRowBlkNum))
-    } else{
-      println(s"In rmmWithoutPartition")
-      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
-    }
+//    MeMMExecutionHelper.rmmDuplicationRight(60, matA, matB, leftRowBlkNum, rightColBlkNum)
+    MeMMExecutionHelper.cpmm(10, left.execute(), right.execute(),leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(60, leftRowBlkNum))
+//    MeMMExecutionHelper.redundancyInnerMM(2,5, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
+//    MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
+//    if (leftTotalBlkNum <= limitNumBlk && leftTotalBlkNum <= rightTotalBlkNum) {
+    ////      val n = if (TaskParallelism > rightColBlkNum) rightColBlkNum else TaskParallelism
+    ////      println(s"In rmmDuplicationLeft, number of partition: $n")
+    ////
+    ////      MeMMExecutionHelper.rmmDuplicationLeft(n, left.execute(), right.execute(), leftRowBlkNum, rightColBlkNum)
+    ////    } else if (rightTotalBlkNum <= limitNumBlk && leftTotalBlkNum > rightTotalBlkNum) {
+    ////
+    ////      val n = if (TaskParallelism > leftRowBlkNum) leftRowBlkNum else TaskParallelism
+    ////      println(s"In rmmDuplicationRight, number of partition: $n")
+    ////
+    ////      MeMMExecutionHelper.rmmDuplicationRight(n, left.execute(), right.execute(), leftRowBlkNum, rightColBlkNum)
+    ////    } else if(leftColBlkNum <= limitNumBlk && rightRowBlkNum <= limitNumBlk && memoryUsage < (memoryExecutor/nodeParallelism)){
+    ////      val n = if (TaskParallelism > leftRowBlkNum) leftRowBlkNum else TaskParallelism
+    ////      println(s"In cpmm, number of partition: $n")
+    ////      MeMMExecutionHelper.cpmm(n, left.execute(), right.execute(),leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(n, leftRowBlkNum))
+    ////    } else{
+    ////      println(s"In rmmWithoutPartition")
+    ////      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
+    ////    }
   }
+
 }

@@ -8,13 +8,13 @@ import org.apache.spark.{Partitioner, SparkConf}
 class RowPartitioner(n: Int, val numRowBlks:Long) extends Partitioner {
   require(n >= 0, s"Number of partitions cannot be negative but found $n")
 
-  val rowsInPartition = if(numRowBlks < n) numRowBlks else numRowBlks/n
+  val rowsInPartition = if(numRowBlks < n) numRowBlks.toDouble else ((numRowBlks*1.0)/(n*1.0))
   override val numPartitions = n
 
   override def getPartition(key: Any): Int = {
     key match {
-      case (i: Int, j: Int) => ((i.toLong) % numPartitions).toInt
-      case (i: Int, j: Int, _: Int) => ((i.toLong) % numPartitions).toInt
+      case (i: Int, j: Int) => Math.floor((i * 1.0) / (rowsInPartition*1.0)).toInt
+      case (i: Int, j: Int, _: Int) => Math.floor((i * 1.0) / (rowsInPartition*1.0)).toInt
       case _=> throw new IllegalArgumentException(s"Unrecognized key: $key")
     }
   }
