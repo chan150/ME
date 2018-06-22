@@ -15,18 +15,18 @@ class GridPartitioner(val p: Int, val q: Int, val numRowBlks:Long, val numColBlk
 
 
   override def getPartition(key: Any): Int = {
-    val rowsInPartition = if(numRowBlks < numPartitions) numRowBlks.toInt else (numRowBlks/numPartitions).toInt
-    val colsInPartition = if(numColBlks < numPartitions) numColBlks.toInt else (numColBlks/numPartitions).toInt
+    val rowsInPartition = if(numRowBlks < numPartitions) numRowBlks.toDouble else (numRowBlks*1.0/numPartitions*1.0)
+    val colsInPartition = if(numColBlks < numPartitions) numColBlks.toDouble else (numColBlks*1.0/numPartitions*1.0)
 
     key match{
-      case (i:Int, j:Int) => ((i-1))/rowsInPartition * q + ((j-1)/colsInPartition)
-      case (i:Int, j:Int, _:Int) => ((i-1))/rowsInPartition * q + ((j-1)/colsInPartition)
+      case (i:Int, j:Int) => Math.floor((i*1.0)/rowsInPartition).toInt * q + Math.floor(j*1.0/colsInPartition).toInt
+      case (i:Int, j:Int, _:Int) => Math.floor((i*1.0)/rowsInPartition).toInt * q + Math.floor(j*1.0/colsInPartition).toInt
       case _=> throw new IllegalArgumentException(s"Unrecognized key: $key")
     }
   }
 
   override def equals(obj: scala.Any): Boolean = {
-    obj.isInstanceOf[ColumnPartitioner] && numPartitions == obj.asInstanceOf[ColumnPartitioner].numPartitions
+    obj.isInstanceOf[GridPartitioner] && numPartitions == obj.asInstanceOf[GridPartitioner].numPartitions
   }
 
   override def hashCode(): Int = {

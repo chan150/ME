@@ -20,6 +20,75 @@ import scala.collection.mutable
 
 object MeMMExecutionHelper {
 
+  def redundancyInnerMM(p:Int, q:Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int): RDD[InternalRow] = {
+
+
+    val part = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
+
+    val leftRDD = left.flatMap{ row =>
+      val pid = row.getInt(0)
+      val rid = row.getInt(1)
+      val cid = row.getInt(2)
+      val mat = row.getStruct(3, 7)
+
+      val startingPoint = Math.floor((rid*1.0/(leftRowBlkNum*1.0/p * 1.0))).toInt * q
+      (startingPoint to startingPoint + (q-1)).map{ i =>
+        (i, ((rid, cid), mat))
+      }
+    }.groupByKey(new IndexPartitioner(p*q, new RedunRowPartitioner(q, p)))
+
+
+
+    val rightRDD = right.flatMap{ row =>
+      val pid = row.getInt(0)
+      val rid = row.getInt(1)
+      val cid = row.getInt(2)
+      val mat = row.getStruct(3, 7)
+
+      val startPoint = Math.floor((cid*1.0/(rightColBlkNum*1.0/ q * 1.0)))
+      (0 to (p -1)).map{i =>
+        ((q*i)+startPoint.toInt, ((rid, cid), mat))
+      }
+    }.groupByKey(new IndexPartitioner(p*q, new RedunColPartitioner(p, q)))
+
+    leftRDD.zipPartitions(rightRDD, preservesPartitioning = true){ case (iter1, iter2) =>
+      val leftBlocks = iter1.next()._2.toList
+      val temp = iter2.next()
+
+      val rightBlocks = temp._2.toList
+      val pid = temp._1
+      val res = findResultRI(pid, p, q, leftRowBlkNum, rightColBlkNum)
+      val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
+
+      res.map{ case (row, col) =>
+        leftBlocks.filter(row == _._1._1).map{ case a =>
+          rightBlocks.filter(col == _._1._2).filter(a._1._2 == _._1._1).map{ case b =>
+            if(!tmp.contains((row, col))){
+              tmp.put((row, col), Block.matrixMultiplication(
+                DMatrixSerializer.deserialize(a._2),
+                DMatrixSerializer.deserialize(b._2)
+              ))
+            }else {
+              tmp.put((row, col), Block.incrementalMultiply(DMatrixSerializer.deserialize(a._2),DMatrixSerializer.deserialize(b._2), tmp.get((row, col)).get))
+            }
+          }
+        }
+      }
+      tmp.iterator
+    }.map{ row =>
+      val rid = row._1._1
+      val cid = row._1._2
+      val pid = part.getPartition((rid, cid))
+      val mat = row._2
+      val res = new GenericInternalRow(4)
+      res.setInt(0, pid)
+      res.setInt(1, rid)
+      res.setInt(2, cid)
+      res.update(3, DMatrixSerializer.serialize(mat))
+      res
+    }
+  }
+
   def rmmWithoutPartition(left: RDD[InternalRow], right: RDD[InternalRow], leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int): RDD[InternalRow] ={
     val leftRDD = left.flatMap{ row =>
       val i = row.getInt(1)
@@ -62,9 +131,13 @@ object MeMMExecutionHelper {
       val res = findResultCPMM(leftRowNum, rightColNum)
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
 
-      res.par.map{ case (row, col) =>
+      var count = 0
+      res.map{ case (row, col) =>
         leftBlocks.filter(row == _._2._1._1).map{ case a =>
           rightBlocks.filter(col == _._2._1._2).filter(a._2._1._2 == _._2._1._1).map{ case b =>
+
+            println(s"${b._1}, key: ($row, $col), $count")
+
             if(!tmp.contains((row, col))){
               tmp.put((row, col), Block.matrixMultiplication(
                 DMatrixSerializer.deserialize(a._2._2),
@@ -75,6 +148,8 @@ object MeMMExecutionHelper {
                 DMatrixSerializer.deserialize(b._2._2),
                 tmp.get((row, col)).get))
             }
+
+              count = count + 1
           }
         }
       }
@@ -90,7 +165,7 @@ object MeMMExecutionHelper {
         }.groupByKey(new IndexPartitioner(n, new RowPartitioner(n, leftRowNum))).flatMap{ case (pid, blk) =>
           val CPagg = findResultRMMRight(pid, n, leftRowNum, rightColNum)
           val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
-          CPagg.par.map{ case (row, col) =>
+          CPagg.map{ case (row, col) =>
             blk.filter((row, col) == _._1).map{ case (idx, mat) =>
               if(!tmp.contains((row, col))){
                 tmp.put((row, col), mat)
@@ -120,7 +195,7 @@ object MeMMExecutionHelper {
         }.groupByKey(new IndexPartitioner(n, new RowPartitioner(n, leftRowNum))).flatMap{ case (pid, blk) =>
           val CPagg = findResultRMMLeft(pid, n, leftRowNum, rightColNum)
           val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
-          CPagg.par.map{ case (row, col) =>
+          CPagg.map{ case (row, col) =>
             blk.filter((row, col) == _._1).map{ case (idx, mat) =>
               if(!tmp.contains((row, col))){
                 tmp.put((row, col), mat)
@@ -154,13 +229,14 @@ object MeMMExecutionHelper {
 
     leftRDD.zipPartitions(dupRDD, preservesPartitioning = true) { case (iter1, iter2) =>
       val leftBlocks = iter1.toList
-      val rightBlocks = iter2.next()._2.toList
+      val temp = iter2.next()
+      val rightBlocks = temp._2.toList
 
-      val pid = leftBlocks.head._1
+      val pid = temp._1
 
       val res = findResultRMMRight(pid, n, leftRowBlkNum, rightColBlkNum)
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
-      res.par.map{ case (row, col) =>
+      res.map{ case (row, col) =>
         leftBlocks.filter(row == _._2._1._1).map{ case a =>
           rightBlocks.filter(col == _._1._2).filter(a._2._1._2 == _._1._1).map{ case b =>
             if(!tmp.contains((row, col))){
@@ -193,14 +269,15 @@ object MeMMExecutionHelper {
     val dupRDD = BroadcastPartitions(left, n)
 
     dupRDD.zipPartitions(rightRDD, preservesPartitioning = true) { case (iter1, iter2) =>
-      val leftBlocks = iter1.next()._2.toList
+      val temp = iter1.next()
+      val leftBlocks = temp._2.toList
       val rightBlocks = iter2.toList
 
-      val pid = rightBlocks.head._1
+      val pid = temp._1
 
       val res = findResultRMMLeft(pid, n, leftRowBlkNum, rightColBlkNum)
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
-      res.par.map{ case (row, col) =>
+      res.map{ case (row, col) =>
         leftBlocks.filter(row == _._1._1).map{ case a =>
           rightBlocks.filter(col == _._2._1._2).filter(a._1._2 == _._2._1._1).map{ case b =>
             if(!tmp.contains((row, col))){
@@ -233,9 +310,9 @@ object MeMMExecutionHelper {
     if(pid == -1){
       tmp
     } else{
-      val rowsInPartition = if(rows < n) rows else rows/n
+      val rowsInPartition = if(rows < n) rows.toDouble else ((rows*1.0)/(n * 1.0))
       val rowsBase = pid % n
-      val rowIndesList = (0 to rows -1).filter(rowsBase == _ / rowsInPartition)
+      val rowIndesList = (0 to rows -1).filter(i => rowsBase == Math.floor(i*1.0/rowsInPartition*1.0).toInt)
 
       rowIndesList.flatMap{ case row =>
         (0 to cols-1).map{ case col =>
@@ -252,11 +329,13 @@ object MeMMExecutionHelper {
     if(pid == -1){
       tmp
     } else{
-      val colsInPartition = if(cols < n) cols else cols/n
-      val colsBase = pid % n
-      val colIndesList = (0 to rows -1).filter(colsBase == _ / colsInPartition)
 
-      colIndesList.flatMap{ case col =>
+      val colsInPartition = if(cols < n) cols.toDouble else ((cols*1.0)/(n * 1.0))
+      val colsBase = pid % n
+//      Math.floor(j * 1.0 /(colsInPartition*1.0)).toInt
+      val colIndexList = (0 to rows -1).filter(i => colsBase == Math.floor(i *1.0/ colsInPartition*1.0).toInt)
+
+      colIndexList.flatMap{ case col =>
         (0 to rows-1).map{ case row =>
           tmp += ((row, col))
         }
@@ -270,6 +349,26 @@ object MeMMExecutionHelper {
 
     (0 to rows-1).map(row => (0 to cols-1).map(col => tmp += ((row, col))))
 
+    tmp
+  }
+
+  private def findResultRI(pid:Int, p:Int, q:Int, rows:Int, cols:Int):scala.collection.mutable.HashSet[(Int, Int)] = {
+    val tmp = new mutable.HashSet[(Int, Int)]()
+    if(pid == -1){
+      tmp.empty
+    } else {
+      val rowsInPartition = if(rows < p) rows.toDouble else ((rows*1.0)/(p*1.0))
+      val colsInPartition = if(cols < q) cols.toDouble else ((cols*1.0)/(q*1.0))
+
+      val colsBase = pid % q
+      val rowsBase = pid / q
+
+      (0 to cols - 1).filter(i => colsBase == Math.floor(i*1.0/colsInPartition*1.0).toInt).flatMap{ col =>
+        (0 to rows -1).filter(j => rowsBase == Math.floor(j*1.0/rowsInPartition*1.0).toInt).map( row =>
+          tmp += ((row, col))
+        )
+      }
+    }
     tmp
   }
 }

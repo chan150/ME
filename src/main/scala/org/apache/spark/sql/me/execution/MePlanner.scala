@@ -28,6 +28,7 @@ object MatrixOperators extends Strategy {
         case _ => MatrixTransposeExecution(planLater(child)) :: Nil
       }
 
+
     case MatrixElementDivideOperator(p, q, left, leftRowNum, leftColNum, right, rightRowNum, rightColNum, blkSize) =>
       MatrixElementDivideExecution(p, q, planLater(left), leftRowNum, leftColNum, planLater(right), rightRowNum, rightColNum, blkSize) :: Nil
 
@@ -41,28 +42,28 @@ object MatrixOperators extends Strategy {
       MatrixElementAddExecution(p, q, planLater(left), leftRowNum, leftColNum,
         planLater(right), rightRowNum, rightColNum, blkSize) :: Nil
 
-    case MatrixMatrixMultiplicationOperator(p, q, left, leftRowNum, leftColNum,
+    case MatrixMatrixMultiplicationOperator(left, leftRowNum, leftColNum,
     right, rightRowNum, rightColNum, blkSize) =>
       if (leftRowNum == 1L && leftColNum > 1L) {
         right match {
           case TransposeOperator(ch) =>
             MatrixTransposeExecution(planLater(
-              MatrixMatrixMultiplicationOperator(p, q, ch, rightColNum, rightRowNum,
+              MatrixMatrixMultiplicationOperator(ch, rightColNum, rightRowNum,
                 TransposeOperator(left), leftColNum, leftRowNum, blkSize))) :: Nil
-          case _ => MatrixMatrixMultiplicationExecution(p, q, planLater(left), leftRowNum, leftColNum,
+          case _ => MatrixMatrixMultiplicationExecution(planLater(left), leftRowNum, leftColNum,
             planLater(right), rightRowNum, rightColNum, blkSize) :: Nil
         }
       } else if (rightRowNum > 1L && rightColNum == 1L) {
         left match {
           case TransposeOperator(ch) =>
             MatrixTransposeExecution(planLater(
-              MatrixMatrixMultiplicationOperator(p, q, TransposeOperator(right), rightColNum, rightRowNum,
+              MatrixMatrixMultiplicationOperator(TransposeOperator(right), rightColNum, rightRowNum,
                 ch, leftColNum, leftRowNum, blkSize))) :: Nil
-          case _ => MatrixMatrixMultiplicationExecution(p, q, planLater(left), leftRowNum, leftColNum,
+          case _ => MatrixMatrixMultiplicationExecution(planLater(left), leftRowNum, leftColNum,
             planLater(right), rightRowNum, rightColNum, blkSize) :: Nil
         }
       } else {
-        MatrixMatrixMultiplicationExecution(p, q, planLater(left), leftRowNum, leftColNum,
+        MatrixMatrixMultiplicationExecution(planLater(left), leftRowNum, leftColNum,
           planLater(right), rightRowNum, rightColNum, blkSize) :: Nil
       }
 
