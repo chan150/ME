@@ -35,9 +35,11 @@ class CoLocatedMatrixRDD[T: ClassTag, U: ClassTag](
                                                     sc: SparkContext,
                                                     var rdd1 : RDD[T],
                                                     var rdd2 : RDD[U],
-                                                    p:Int, q:Int) extends RDD[(T, U)](sc, Nil) with Serializable {
+                                                    p:Int, q:Int,
+                                                    master:String,
+                                                    slaves:Array[String]) extends RDD[(T, U)](sc, Nil) with Serializable {
 
-  val numPartitionsInRdd2 = p*q
+  val numPartitionsInRdd2 = rdd2.partitions.length
 
 
   override def getPartitions: Array[Partition] = {
@@ -50,8 +52,15 @@ class CoLocatedMatrixRDD[T: ClassTag, U: ClassTag](
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
+
+
+
     val currSplit = split.asInstanceOf[CartesianPartition]
-    (rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)).distinct
+    val preloc = (rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)).distinct
+//    println(s"$preloc, ${slaves(0)}")
+
+    preloc
+//    Seq{slaves(0)}
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {

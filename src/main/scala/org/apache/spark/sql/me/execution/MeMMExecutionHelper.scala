@@ -39,7 +39,6 @@ object MeMMExecutionHelper {
 
 
 
-
     val rightRDD = right.flatMap{ row =>
       val pid = row.getInt(0)
       val rid = row.getInt(1)

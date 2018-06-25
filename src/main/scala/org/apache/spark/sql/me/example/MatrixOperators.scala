@@ -20,7 +20,7 @@ object MatrixOperators {
         .config("spark.shuffle.consolidateFiles", "true")
         .config("spark.shuffle.compress", "false")
         .config("spark.rpc.message.maxSize", "1000")
-        .config("spark.locality.wait", "0s")
+        .config("spark.locality.wait", "3s")
         .config("spark.task.cpus", "2")
 //      .config("spark.executor.cores", "12")
 //      .config("spark.executor.memory", "60g")
@@ -84,14 +84,14 @@ object MatrixOperators {
     val B = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j),60)
       .map(coord =>  MatrixBlock(-1, coord._1, coord._2, b4)).toDS()
 
-
-    val tmpRowBlkNum = 10
-    val tmpColBlkNum = 10
-    val tmpRowNum = tmpRowBlkNum * blkSize
-    val tmpColNum = tmpColBlkNum * blkSize
-
-    val tmp = spark.sparkContext.parallelize(for(i <- 0 until tmpRowBlkNum; j <- 0 until tmpColBlkNum) yield (i, j),60)
-      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, b4)).toDS()
+//
+//    val tmpRowBlkNum = 10
+//    val tmpColBlkNum = 10
+//    val tmpRowNum = tmpRowBlkNum * blkSize
+//    val tmpColNum = tmpColBlkNum * blkSize
+//
+//    val tmp = spark.sparkContext.parallelize(for(i <- 0 until tmpRowBlkNum; j <- 0 until tmpColBlkNum) yield (i, j),60)
+//      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, b4)).toDS()
 
 //    seq1.rdd.foreach{ case row =>
 //      val idx = (row.rid, row.cid)
@@ -113,14 +113,14 @@ object MatrixOperators {
 
 
     val C =  A.matrixMultiply(leftRowNum, leftColNum, B, rightRowNum, rightColNum, blkSize)
-
-    val D = C.matrixMultiply(leftRowNum, rightColNum, tmp, tmpRowNum, tmpColNum, blkSize)
-
-    val result = C.matrixMultiply(tmpRowNum, tmpColNum, D, leftRowNum, leftColNum, blkSize)
 //
-    result.explain(true)
+//    val D = C.matrixMultiply(leftRowNum, rightColNum, tmp, tmpRowNum, tmpColNum, blkSize)
+//
+//    val result = C.matrixMultiply(tmpRowNum, tmpColNum, D, leftRowNum, leftColNum, blkSize)
+//
+    C.explain(true)
 
-    println(result.rdd.count())
+    println( C.rdd.count())
 
 //    println(result.rdd.partitions.size)
 //    result.rdd.collect().foreach{ row =>

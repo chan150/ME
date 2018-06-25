@@ -298,11 +298,40 @@ case class MatrixMatrixMultiplicationExecution(
     println(s"metadata size: ${metadata.size}")
     metadata.foreach(println)
 
+    val master = left.sqlContext.sparkSession.sparkContext.master.replace("spark://", "").split(":")(0)
+    val slaves = left.sqlContext.sparkSession.sparkContext.statusTracker.getExecutorInfos.filter(_.host() != master).map{a =>
+      a.host()}
+
 
     val matA = left.execute()
     val matB = right.execute()
 
+    val p = 10
+    val q = 6
 
+    println(s"Test: ${new CoLocatedMatrixRDD(left.sqlContext.sparkSession.sparkContext,
+      matA.flatMap{ row =>
+      val pid = row.getInt(0)
+      val rid = row.getInt(1)
+      val cid = row.getInt(2)
+      val mat = row.getStruct(3, 7)
+
+      val startingPoint = Math.floor((rid*1.0/(leftRowBlkNum*1.0/p * 1.0))).toInt * q
+      (startingPoint to startingPoint + (q-1)).map{ i =>
+        (i, ((rid, cid), mat))
+      }
+    }.groupByKey(new IndexPartitioner(p*q, new RedunRowPartitioner(q, p))),
+      matB.flatMap{ row =>
+        val pid = row.getInt(0)
+        val rid = row.getInt(1)
+        val cid = row.getInt(2)
+        val mat = row.getStruct(3, 7)
+
+        val startPoint = Math.floor((cid*1.0/(rightColBlkNum*1.0/ q * 1.0)))
+        (0 to (p -1)).map{i =>
+          ((q*i)+startPoint.toInt, ((rid, cid), mat))
+        }
+      }.groupByKey(new IndexPartitioner(p*q, new RedunColPartitioner(p, q))), 1, 1, master, slaves).count()}")
 
         //    if(leftColBlkNum == 1 && rightRowBlkNum == 1){
     //
