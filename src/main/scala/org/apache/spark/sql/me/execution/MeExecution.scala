@@ -189,7 +189,41 @@ case class MatrixMatrixMultiplicationExecution(
 
   override def children: Seq[SparkPlan] = Seq (left, right)
 
-  override def metadata: Map[String, String] = right.metadata ++ left.metadata ++ Map("part" -> "grid")
+//  override def metadata: Map[String, String] = right.metadata ++ left.metadata ++ Map((rightRowNum.toString ->rightColNum.toString ))
+
+  override def metadata: Map[String, String] = if(left.metadata.contains("part") && right.metadata.contains("part")){
+    val v = left.metadata.get("part").get
+    val v2 = right.metadata.get("part").get
+
+    if(v.equals(v2)){
+      val newv = v match{
+        case "row" => "col"
+        case "col" => "row"
+        case _ => "error"
+      }
+      Map(("part"-> newv), ("equls" -> "existing"))
+    } else{
+      Map(("part"-> v))
+    }
+
+
+  } else if(left.metadata.contains("part") && !right.metadata.contains("part")){
+    val newV = left.metadata.get("part").get match {
+      case "row" => "col"
+      case "col" => "row"
+      case _ => "error"
+    }
+    Map(("part"-> newV), ("left"-> "existing"))
+  } else if(!left.metadata.contains("part") && right.metadata.contains("part")) {
+    val newV = right.metadata.get("part").get match {
+      case "row" => "col"
+      case "col" => "row"
+      case _ => "error"
+    }
+    Map(("part"-> newV), ("right"-> "existing"))
+  } else{
+    Map(("part"-> "row"), ("notboth" ->"none"))
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     require(leftColNum == rightRowNum, s"Matrix dimension not match, leftColNum = $leftColNum, rightRowNum =$rightRowNum")
@@ -268,14 +302,7 @@ case class MatrixMatrixMultiplicationExecution(
     val matA = left.execute()
     val matB = right.execute()
 
-    if(matA.partitioner != None) {
-      matA.partitioner.get.toString
-    }
-
-    if(matB.partitioner != None) {
-      matB.partitioner.get.toString
-    }
-    //    if(leftColBlkNum == 1 && rightRowBlkNum == 1){
+        //    if(leftColBlkNum == 1 && rightRowBlkNum == 1){
     //
     //      if(leftRowBlkNum <= rightColBlkNum){
     //        MeExecutionHelper.multiplyOuterProductDuplicationLeft(n, left.execute(), right.execute(), rightColBlkNum)
@@ -287,7 +314,7 @@ case class MatrixMatrixMultiplicationExecution(
     //    }
 
 //    MeMMExecutionHelper.rmmDuplicationRight(60, matA, matB, leftRowBlkNum, rightColBlkNum)
-    MeMMExecutionHelper.cpmm(10, left.execute(), right.execute(),leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(60, leftRowBlkNum))
+    MeMMExecutionHelper.cpmm(10, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(10, leftRowBlkNum))
 //    MeMMExecutionHelper.redundancyInnerMM(2,5, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 //    MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 //    if (leftTotalBlkNum <= limitNumBlk && leftTotalBlkNum <= rightTotalBlkNum) {

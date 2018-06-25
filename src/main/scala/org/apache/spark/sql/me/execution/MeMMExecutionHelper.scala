@@ -123,7 +123,30 @@ object MeMMExecutionHelper {
   }
 
   def cpmm(n: Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowNum: Int, leftColNum: Int, rightRowNum: Int, rightColNum: Int, resultPart: Partitioner): RDD[InternalRow] = {
+//    if(left.partitioner != None){
+//      left.partitioner.get match {
+//        case col:ColumnPartitioner => println("column part left")
+//        case row:RowPartitioner => println("row Part left")
+//        case _ => println("error")
+//      }
+//    } else{
+//      println("none")
+//    }
+//
+//
+//
+//    if(right.partitioner != None){
+//      right.partitioner.get match {
+//        case col:ColumnPartitioner => println("column part right")
+//        case row:RowPartitioner => println("row Part right")
+//        case _ => println("error")
+//      }
+//    } else{
+//      println("none")
+//    }
+
     val leftRDD = repartitionWithTargetPartitioner(new ColumnPartitioner(n, leftColNum), left)
+//    println(leftRDD.partitioner.toString)
     val rightRDD = repartitionWithTargetPartitioner(new RowPartitioner(n, rightRowNum), right)
     val newBlocks =leftRDD.zipPartitions(rightRDD, preservesPartitioning = true){ case (iter1, iter2) =>
       val leftBlocks = iter1.toList
@@ -136,7 +159,6 @@ object MeMMExecutionHelper {
         leftBlocks.filter(row == _._2._1._1).map{ case a =>
           rightBlocks.filter(col == _._2._1._2).filter(a._2._1._2 == _._2._1._1).map{ case b =>
 
-            println(s"${b._1}, key: ($row, $col), $count")
 
             if(!tmp.contains((row, col))){
               tmp.put((row, col), Block.matrixMultiplication(

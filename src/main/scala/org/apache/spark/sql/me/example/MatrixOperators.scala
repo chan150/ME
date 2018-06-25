@@ -61,7 +61,7 @@ object MatrixOperators {
 
 
     val leftRowBlkNum = 10
-    val leftColBlkNum = 10
+    val leftColBlkNum = 20
 
 
 
@@ -85,6 +85,13 @@ object MatrixOperators {
       .map(coord =>  MatrixBlock(-1, coord._1, coord._2, b4)).toDS()
 
 
+    val tmpRowBlkNum = 10
+    val tmpColBlkNum = 10
+    val tmpRowNum = tmpRowBlkNum * blkSize
+    val tmpColNum = tmpColBlkNum * blkSize
+
+    val tmp = spark.sparkContext.parallelize(for(i <- 0 until tmpRowBlkNum; j <- 0 until tmpColBlkNum) yield (i, j),60)
+      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, b4)).toDS()
 
 //    seq1.rdd.foreach{ case row =>
 //      val idx = (row.rid, row.cid)
@@ -104,17 +111,17 @@ object MatrixOperators {
 //    val tmp1 = A.matrixMultiply(2, 5, 4, 4, A.transpose(), 4, 4, 2)
 //                    .matrixMultiply(2, 5, 4, 4, B, 4, 4, 2)
 
-   
-    val result = A.matrixMultiply(leftRowNum, leftColNum, B, rightRowNum, rightColNum, blkSize)
 
+    val C =  A.matrixMultiply(leftRowNum, leftColNum, B, rightRowNum, rightColNum, blkSize)
 
+    val D = C.matrixMultiply(leftRowNum, rightColNum, tmp, tmpRowNum, tmpColNum, blkSize)
 
+    val result = C.matrixMultiply(tmpRowNum, tmpColNum, D, leftRowNum, leftColNum, blkSize)
+//
+    result.explain(true)
 
-    val C = result.matrixMultiply(leftRowNum, rightColNum, B, rightRowNum, rightColNum, blkSize)
+    println(result.rdd.count())
 
-//    C .explain(true)
-
-    println(C.rdd.count())
 //    println(result.rdd.partitions.size)
 //    result.rdd.collect().foreach{ row =>
 //

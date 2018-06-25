@@ -41,8 +41,6 @@ object ColumnPartitioner{
       val cid = row.getInt(2)
       val mat = row.getStruct(3, 7)
 
-      printf(s"column partitioner: ($rid, $cid), key: ${partitioner.getPartition((rid, cid))}")
-
       (partitioner.getPartition((rid, cid)), ((rid, cid), mat))
     }
 
