@@ -302,6 +302,8 @@ case class MatrixMatrixMultiplicationExecution(
     val matA = left.execute()
     val matB = right.execute()
 
+
+
         //    if(leftColBlkNum == 1 && rightRowBlkNum == 1){
     //
     //      if(leftRowBlkNum <= rightColBlkNum){

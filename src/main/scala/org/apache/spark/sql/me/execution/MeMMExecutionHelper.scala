@@ -39,6 +39,7 @@ object MeMMExecutionHelper {
 
 
 
+
     val rightRDD = right.flatMap{ row =>
       val pid = row.getInt(0)
       val rid = row.getInt(1)
@@ -50,6 +51,7 @@ object MeMMExecutionHelper {
         ((q*i)+startPoint.toInt, ((rid, cid), mat))
       }
     }.groupByKey(new IndexPartitioner(p*q, new RedunColPartitioner(p, q)))
+
 
     leftRDD.zipPartitions(rightRDD, preservesPartitioning = true){ case (iter1, iter2) =>
       val leftBlocks = iter1.next()._2.toList
