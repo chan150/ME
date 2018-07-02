@@ -53,14 +53,15 @@ class CoLocatedMatrixRDD[T: ClassTag, U: ClassTag](
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
 
-
+//    val sortedslaves = slaves.sorted
 
     val currSplit = split.asInstanceOf[CartesianPartition]
+
     val preloc = (rdd1.preferredLocations(currSplit.s1) ++ rdd2.preferredLocations(currSplit.s2)).distinct
-//    println(s"$preloc, ${slaves(0)}")
+//    println(s"$preloc, ${sortedslaves(0)}")
 
     preloc
-//    Seq{slaves(0)}
+//    Seq{sortedslaves(0)}
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[(T, U)] = {

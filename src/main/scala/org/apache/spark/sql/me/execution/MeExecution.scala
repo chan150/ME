@@ -300,14 +300,17 @@ case class MatrixMatrixMultiplicationExecution(
 
     val master = left.sqlContext.sparkSession.sparkContext.master.replace("spark://", "").split(":")(0)
     val slaves = left.sqlContext.sparkSession.sparkContext.statusTracker.getExecutorInfos.filter(_.host() != master).map{a =>
-      a.host()}
+      a.host()}.sorted
 
+    println(s"${slaves.foreach(println)}, ${slaves.length}")
 
     val matA = left.execute()
     val matB = right.execute()
 
     val p = 10
     val q = 6
+
+
 
     println(s"Test: ${new CoLocatedMatrixRDD(left.sqlContext.sparkSession.sparkContext,
       matA.flatMap{ row =>

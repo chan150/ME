@@ -37,6 +37,8 @@ object MeMMExecutionHelper {
       }
     }.groupByKey(new IndexPartitioner(p*q, new RedunRowPartitioner(q, p)))
 
+    leftRDD.preferredLocations(leftRDD.partitions(0))
+
 
 
     val rightRDD = right.flatMap{ row =>
