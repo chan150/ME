@@ -24,6 +24,31 @@ object MeMMExecutionHelper {
                           master:String, slaves:Array[String],
                           sc: SparkContext): RDD[InternalRow] = {
 
+//    val a = left.flatMap{ row =>
+//      val i = row.getInt(1)
+//      val k = row.getInt(2)
+//      val matrix = row.getStruct(3, 7)
+//
+//      (0 until rightColBlkNum).map(j => ((i, (j/2).toInt, k), matrix))
+//    }
+//
+//    val b = right.flatMap{ row =>
+//      val k = row.getInt(1)
+//      val j = row.getInt(2)
+//      val matrix = row.getStruct(3, 7)
+//
+//      (0 until leftRowBlkNum).map(i => ((i, (j/2).toInt, k), matrix))
+//    }
+//
+//    var count = 0
+//
+//    val c = a.cogroup(b, new RowPartitioner(10, leftRowBlkNum)).map{case (k, (iter1, iter2)) =>
+//      println(s"key: $k, count: $count, a size: ${iter1.size}, b size: ${iter2.size}")
+//        count = count + 1
+//    }
+//
+//    c.count()
+
     val rdd1 = left.flatMap{ row =>
       val rid = row.getInt(1)
       val cid = row.getInt(2)
@@ -50,11 +75,9 @@ object MeMMExecutionHelper {
     new CoLocatedMatrixRDD[Int](sc, Seq(rdd1, rdd2), new IndexPartitioner(p*q, new RedunRowPartitioner(q, p)), 1, master, slaves)
       .mapValues { case Array(vs, w1s) =>
       (vs.asInstanceOf[Iterable[((Int, Int), InternalRow)]], w1s.asInstanceOf[Iterable[((Int, Int), InternalRow)]])
-      }.flatMap{ case (pid, (iter1, iter2)) =>
-        val leftBlocks = iter1.toList
-        val rightBlocks = iter2.toList
+      }.flatMap{ case (pid, (leftBlocks, rightBlocks)) =>
 
-        println(s"pid: $pid")
+//        println(s"pid: $pid")
 
         val res = findResultRI(pid.toInt, p, q, leftRowBlkNum, rightColBlkNum)
 
@@ -63,6 +86,7 @@ object MeMMExecutionHelper {
         res.map{ case (row, col) =>
           leftBlocks.filter(row == _._1._1).map{ case a =>
             rightBlocks.filter(col == _._1._2).filter(a._1._2 == _._1._1).map{ case b =>
+//              println(s"key: $row, $col")
               if(!tmp.contains((row, col))){
                 tmp.put((row, col), Block.matrixMultiplication(
                   DMatrixSerializer.deserialize(a._2),
@@ -74,6 +98,7 @@ object MeMMExecutionHelper {
             }
           }
         }
+//        println(s"temp size: ${tmp.size}")
         tmp.iterator
       }.map{ row =>
         val rid = row._1._1
@@ -96,6 +121,8 @@ object MeMMExecutionHelper {
 
 
 //    CoLocatedMatrixRDD
+
+
 
     val part = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
 

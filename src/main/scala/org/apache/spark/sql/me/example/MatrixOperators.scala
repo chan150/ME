@@ -61,7 +61,7 @@ object MatrixOperators {
 
 
     val leftRowBlkNum = 10
-    val leftColBlkNum = 20
+    val leftColBlkNum = 10
 
 
 

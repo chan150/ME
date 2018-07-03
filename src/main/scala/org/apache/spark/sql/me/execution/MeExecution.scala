@@ -298,11 +298,11 @@ case class MatrixMatrixMultiplicationExecution(
     println(s"metadata size: ${metadata.size}")
     metadata.foreach(println)
 
-    val master = left.sqlContext.sparkSession.sparkContext.master.replace("spark://", "").split(":")(0)
-    val slaves = left.sqlContext.sparkSession.sparkContext.statusTracker.getExecutorInfos.filter(_.host() != master).map{a =>
+    val master = sc.master.replace("spark://", "").split(":")(0)
+    val slaves = sc.statusTracker.getExecutorInfos.filter(_.host() != master).map{a =>
       a.host()}.sorted
 
-    println(s"${slaves.foreach(println)}, ${slaves.length}")
+//    println(s"${slaves.foreach(println)}, ${slaves.length}")
 
     val matA = left.execute()
     val matB = right.execute()

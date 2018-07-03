@@ -64,11 +64,9 @@ class CoLocatedMatrixRDD[K: ClassTag]( sc: SparkContext,
     rdds.map { rdd: RDD[_] =>
       if (rdd.partitioner == Some(part)) {
         logDebug("Adding one-to-one dependency with " + rdd)
-        println("Adding one-to-one dependency with " + rdd)
         new OneToOneDependency(rdd)
       } else {
         logDebug("Adding shuffle dependency with " + rdd)
-        println("Adding shuffle dependency with " + rdd)
         new ShuffleDependency[K, Any, CoGroupCombiner](
           rdd.asInstanceOf[RDD[_ <: Product2[K, _]]], part, serializer)
       }
