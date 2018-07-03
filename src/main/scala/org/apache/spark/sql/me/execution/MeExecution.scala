@@ -5,7 +5,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, GenericInternalRow}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.me.serializer.DMatrixSerializer
-import org.apache.spark.sql.me.partitioner.{IndexPartitioner, RedunColPartitioner, RedunRowPartitioner, RowPartitioner}
+import org.apache.spark.sql.me.partitioner._
 import org.apache.spark.sql.types.DataType
 
 import scala.collection.mutable
@@ -247,21 +247,21 @@ case class MatrixMatrixMultiplicationExecution(
     val bc = left.sqlContext.sparkSession.sparkContext.broadcast(bcV)
 
 
-    val sc = left.sqlContext.sparkSession.sparkContext.getConf
+    val sc = left.sqlContext.sparkSession.sparkContext
 //        sc.getAll.foreach(println)
 
-    require(sc.contains("spark.executor.cores"), s"There are not configuration for spark.executor.cores ")
+    require(sc.getConf.contains("spark.executor.cores"), s"There are not configuration for spark.executor.cores ")
 
-    val coreExecutor = sc.get("spark.executor.cores").toInt
-    val coreTask = sc.contains("spark.task.cpus") match {
+    val coreExecutor = sc.getConf.get("spark.executor.cores").toInt
+    val coreTask = sc.getConf.contains("spark.task.cpus") match {
       case true =>
-        sc.get("spark.task.cpus").toInt
+        sc.getConf.get("spark.task.cpus").toInt
       case false =>
         1
     }
 
-    require(sc.contains("spark.executor.memory"), s"There are not configuration for spark.executor.memory ")
-    val memoryExecutor = sc.get("spark.executor.memory").replace("g", "").toDouble
+    require(sc.getConf.contains("spark.executor.memory"), s"There are not configuration for spark.executor.memory ")
+    val memoryExecutor = sc.getConf.get("spark.executor.memory").replace("g", "").toDouble
 
     //    println(left.sqlContext.sparkSession.sparkContext.statusTracker.getExecutorInfos.length)
     //    val execute = left.sqlContext.sparkSession.sparkContext.statusTracker.getExecutorInfos
@@ -312,30 +312,7 @@ case class MatrixMatrixMultiplicationExecution(
 
 
 
-    println(s"Test: ${new CoLocatedMatrixRDD(left.sqlContext.sparkSession.sparkContext,
-      matA.flatMap{ row =>
-      val pid = row.getInt(0)
-      val rid = row.getInt(1)
-      val cid = row.getInt(2)
-      val mat = row.getStruct(3, 7)
-
-      val startingPoint = Math.floor((rid*1.0/(leftRowBlkNum*1.0/p * 1.0))).toInt * q
-      (startingPoint to startingPoint + (q-1)).map{ i =>
-        (i, ((rid, cid), mat))
-      }
-    }.groupByKey(new IndexPartitioner(p*q, new RedunRowPartitioner(q, p))),
-      matB.flatMap{ row =>
-        val pid = row.getInt(0)
-        val rid = row.getInt(1)
-        val cid = row.getInt(2)
-        val mat = row.getStruct(3, 7)
-
-        val startPoint = Math.floor((cid*1.0/(rightColBlkNum*1.0/ q * 1.0)))
-        (0 to (p -1)).map{i =>
-          ((q*i)+startPoint.toInt, ((rid, cid), mat))
-        }
-      }.groupByKey(new IndexPartitioner(p*q, new RedunColPartitioner(p, q))), 1, 1, master, slaves).count()}")
-
+//    1, 1, master, slaves
         //    if(leftColBlkNum == 1 && rightRowBlkNum == 1){
     //
     //      if(leftRowBlkNum <= rightColBlkNum){
@@ -348,8 +325,9 @@ case class MatrixMatrixMultiplicationExecution(
     //    }
 
 //    MeMMExecutionHelper.rmmDuplicationRight(60, matA, matB, leftRowBlkNum, rightColBlkNum)
-    MeMMExecutionHelper.cpmm(10, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(10, leftRowBlkNum))
-//    MeMMExecutionHelper.redundancyInnerMM(2,5, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
+//    MeMMExecutionHelper.cpmm(10, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(10, leftRowBlkNum))
+    MeMMExecutionHelper.redundancyCoGroupMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,master,slaves,sc)
+//    MeMMExecutionHelper.redundancyInnerMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 //    MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 //    if (leftTotalBlkNum <= limitNumBlk && leftTotalBlkNum <= rightTotalBlkNum) {
     ////      val n = if (TaskParallelism > rightColBlkNum) rightColBlkNum else TaskParallelism

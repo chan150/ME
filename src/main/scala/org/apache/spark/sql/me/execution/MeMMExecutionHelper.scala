@@ -7,21 +7,95 @@ import org.apache.spark.sql.me.serializer.DMatrixSerializer
 import org.apache.spark.sql.me.execution.MeExecutionHelper.{BroadcastPartitions, repartitionWithTargetPartitioner}
 import org.apache.spark.sql.me.matrix.{Block, DistributedMatrix}
 import org.apache.spark.sql.me.partitioner._
-import org.apache.spark.Partitioner
+import org.apache.spark.{Partitioner, SparkContext}
 import jcuda.jcublas._
 import jcuda._
 import jcuda.jcublas._
 import jcuda.jcusparse._
-
 import jcuda.jcudnn._
-
 
 import scala.collection.mutable
 
 object MeMMExecutionHelper {
 
+  def redundancyCoGroupMM(p:Int, q:Int,
+                          left: RDD[InternalRow], right: RDD[InternalRow],
+                          leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int,
+                          master:String, slaves:Array[String],
+                          sc: SparkContext): RDD[InternalRow] = {
+
+    val rdd1 = left.flatMap{ row =>
+      val rid = row.getInt(1)
+      val cid = row.getInt(2)
+      val mat = row.getStruct(3, 7)
+
+      val startingPoint = Math.floor((rid*1.0/(leftRowBlkNum*1.0/p * 1.0))).toInt * q
+      (startingPoint to startingPoint + (q-1)).map{ i =>
+        (i, ((rid, cid), mat))
+      }
+    }
+
+    val rdd2 = right.flatMap{ row =>
+      val rid = row.getInt(1)
+      val cid = row.getInt(2)
+      val mat = row.getStruct(3, 7)
+
+      val startPoint = Math.floor((cid*1.0/(rightColBlkNum*1.0/ q * 1.0)))
+      (0 to (p -1)).map{i =>
+        ((q*i)+startPoint.toInt, ((rid, cid), mat))
+      }
+    }
+
+
+    new CoLocatedMatrixRDD[Int](sc, Seq(rdd1, rdd2), new IndexPartitioner(p*q, new RedunRowPartitioner(q, p)), 1, master, slaves)
+      .mapValues { case Array(vs, w1s) =>
+      (vs.asInstanceOf[Iterable[((Int, Int), InternalRow)]], w1s.asInstanceOf[Iterable[((Int, Int), InternalRow)]])
+      }.flatMap{ case (pid, (iter1, iter2)) =>
+        val leftBlocks = iter1.toList
+        val rightBlocks = iter2.toList
+
+        println(s"pid: $pid")
+
+        val res = findResultRI(pid.toInt, p, q, leftRowBlkNum, rightColBlkNum)
+
+        val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
+
+        res.map{ case (row, col) =>
+          leftBlocks.filter(row == _._1._1).map{ case a =>
+            rightBlocks.filter(col == _._1._2).filter(a._1._2 == _._1._1).map{ case b =>
+              if(!tmp.contains((row, col))){
+                tmp.put((row, col), Block.matrixMultiplication(
+                  DMatrixSerializer.deserialize(a._2),
+                  DMatrixSerializer.deserialize(b._2)
+                ))
+              }else {
+                tmp.put((row, col), Block.incrementalMultiply(DMatrixSerializer.deserialize(a._2),DMatrixSerializer.deserialize(b._2), tmp.get((row, col)).get))
+              }
+            }
+          }
+        }
+        tmp.iterator
+      }.map{ row =>
+        val rid = row._1._1
+        val cid = row._1._2
+
+        val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
+
+        val pid = resultPart.getPartition((rid, cid))
+        val mat = row._2
+        val res = new GenericInternalRow(4)
+        res.setInt(0, pid)
+        res.setInt(1, rid)
+        res.setInt(2, cid)
+        res.update(3, DMatrixSerializer.serialize(mat))
+        res
+      }
+  }
+
   def redundancyInnerMM(p:Int, q:Int, left: RDD[InternalRow], right: RDD[InternalRow], leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int): RDD[InternalRow] = {
 
+
+//    CoLocatedMatrixRDD
 
     val part = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
 
@@ -37,7 +111,7 @@ object MeMMExecutionHelper {
       }
     }.groupByKey(new IndexPartitioner(p*q, new RedunRowPartitioner(q, p)))
 
-    leftRDD.preferredLocations(leftRDD.partitions(0))
+//    leftRDD.preferredLocations(leftRDD.partitions(0))
 
 
 
@@ -53,8 +127,12 @@ object MeMMExecutionHelper {
       }
     }.groupByKey(new IndexPartitioner(p*q, new RedunColPartitioner(p, q)))
 
+//    val A = leftRDD.cogroup(rightRDD)
+//    val B = leftRDD.zipPartitions(rightRDD)
+//    val C = leftRDD.cartesian(rightRDD)
 
     leftRDD.zipPartitions(rightRDD, preservesPartitioning = true){ case (iter1, iter2) =>
+
       val leftBlocks = iter1.next()._2.toList
       val temp = iter2.next()
 
