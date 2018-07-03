@@ -14,7 +14,9 @@ class RowPartitioner(n: Int, val numRowBlks:Long) extends Partitioner {
   override def getPartition(key: Any): Int = {
     key match {
       case (i: Int, j: Int) => Math.floor((i * 1.0) / (rowsInPartition*1.0)).toInt
-      case (i: Int, j: Int, _: Int) => Math.floor((i * 1.0) / (rowsInPartition*1.0)).toInt
+      case (i: Int, j: Int, _: Int) =>
+        println(s"row part, index: $i, $j  numPartition: $numPartitions, rowsInPartition: $rowsInPartition, key: ${Math.floor((i * 1.0) / (rowsInPartition*1.0)).toInt}")
+        Math.floor((i * 1.0) / (rowsInPartition*1.0)).toInt
       case _=> throw new IllegalArgumentException(s"Unrecognized key: $key")
     }
   }
