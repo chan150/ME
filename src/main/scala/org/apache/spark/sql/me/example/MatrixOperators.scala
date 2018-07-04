@@ -20,7 +20,7 @@ object MatrixOperators {
         .config("spark.shuffle.consolidateFiles", "true")
         .config("spark.shuffle.compress", "false")
         .config("spark.rpc.message.maxSize", "1000")
-        .config("spark.locality.wait", "3s")
+        .config("spark.locality.wait", "10s")
         .config("spark.task.cpus", "2")
 //      .config("spark.executor.cores", "12")
 //      .config("spark.executor.memory", "60g")
@@ -60,7 +60,7 @@ object MatrixOperators {
 //    ).toDS()
 
 
-    val leftRowBlkNum = 10
+    val leftRowBlkNum = 12
     val leftColBlkNum = 10
 
 
@@ -76,12 +76,12 @@ object MatrixOperators {
     val rightColNum = rightColBlkNum * blkSize
 
 
-    val A = spark.sparkContext.parallelize(for(i <- 0 until leftRowBlkNum; j <- 0 until leftColBlkNum) yield (i, j),60)
+    val A = spark.sparkContext.parallelize(for(i <- 0 until leftRowBlkNum; j <- 0 until leftColBlkNum) yield (i, j),leftRowBlkNum * leftColBlkNum)
       .map(coord =>  MatrixBlock(-1, coord._1, coord._2, b4)).toDS()
 
 
 
-    val B = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j),60)
+    val B = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j),rightRowBlkNum * rightColBlkNum)
       .map(coord =>  MatrixBlock(-1, coord._1, coord._2, b4)).toDS()
 
 //

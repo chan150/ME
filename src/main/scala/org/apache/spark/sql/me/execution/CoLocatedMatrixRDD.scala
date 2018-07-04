@@ -6,8 +6,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{MapPartitionsRDD, RDD}
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.sql.me.partitioner.{CubePartitioner, GridPartitioner}
 import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 import org.apache.spark.util.Utils
 
@@ -41,7 +42,8 @@ class CoLocatedMatrixRDD[K: ClassTag]( sc: SparkContext,
                                        part: Partitioner,
                                        range:Int,
                                        master:String,
-                                       slaves:Array[String]
+                                       slaves:Array[String],
+                                       numRowBlks:Long, numColBlks:Long
                                      )
   extends RDD[(K, Array[Iterable[_]])](sc, Nil) {
 
@@ -93,12 +95,15 @@ class CoLocatedMatrixRDD[K: ClassTag]( sc: SparkContext,
     Seq{slaves((split.asInstanceOf[CoGroupPartition].index / range) % slaves.length)}
   }
 
-
-  override val partitioner: Some[Partitioner] = Some(part)
-
+//  override val partitioner: Some[Partitioner] = Some(part)
+  override val partitioner: Some[Partitioner] = part match{
+    case cube: CubePartitioner => val grid = new GridPartitioner(cube.p, cube.q, numRowBlks, numColBlks).asInstanceOf[Partitioner]
+      Some(grid)
+    case _ => throw new IllegalArgumentException(s"Partitioner not recognized for $part")
+  }
   override def compute(s: Partition, context: TaskContext): Iterator[(K, Array[Iterable[_]])] = {
     val split = s.asInstanceOf[CoGroupPartition]
-    println(s"in compute, ${split.index}")
+//    println(s"in compute, ${split.index}")
     val numRdds = dependencies.length
 
     // A list of (rdd iterator, dependency number) pairs

@@ -15,11 +15,16 @@ class GridPartitioner(val p: Int, val q: Int, val numRowBlks:Long, val numColBlk
 
 
   override def getPartition(key: Any): Int = {
-    val rowsInPartition = if(numRowBlks < numPartitions) numRowBlks.toDouble else (numRowBlks*1.0/numPartitions*1.0)
-    val colsInPartition = if(numColBlks < numPartitions) numColBlks.toDouble else (numColBlks*1.0/numPartitions*1.0)
+    val rowsInPartition = if(numRowBlks < p) numRowBlks.toDouble else (numRowBlks*1.0/p*1.0)
+    val colsInPartition = if(numColBlks < q) numColBlks.toDouble else (numColBlks*1.0/q*1.0)
 
     key match{
-      case (i:Int, j:Int) => Math.floor((i*1.0)/rowsInPartition).toInt * q + Math.floor(j*1.0/colsInPartition).toInt
+      case (i:Int, j:Int) =>
+//        println(s"p: $p, q: $q, rowsInPartition: $rowsInPartition, colsInPartition: $colsInPartition," +
+//          s" key: ${Math.floor((i*1.0)/rowsInPartition).toInt * q + Math.floor(j*1.0/colsInPartition).toInt}," +
+//          s" numRowBlks: $numRowBlks, numColBlks: $numColBlks," +
+//          s" index: $i, $j")
+        Math.floor((i*1.0)/rowsInPartition).toInt * q + Math.floor(j*1.0/colsInPartition).toInt
       case (i:Int, j:Int, _:Int) => Math.floor((i*1.0)/rowsInPartition).toInt * q + Math.floor(j*1.0/colsInPartition).toInt
       case _=> throw new IllegalArgumentException(s"Unrecognized key: $key")
     }

@@ -307,9 +307,9 @@ case class MatrixMatrixMultiplicationExecution(
     val matA = left.execute()
     val matB = right.execute()
 
-    val p = 10
-    val q = 6
-
+    val p = 6
+    val q = 10
+    val k = 2
 
 
 //    1, 1, master, slaves
@@ -326,7 +326,9 @@ case class MatrixMatrixMultiplicationExecution(
 
 //    MeMMExecutionHelper.rmmDuplicationRight(60, matA, matB, leftRowBlkNum, rightColBlkNum)
 //    MeMMExecutionHelper.cpmm(10, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(10, leftRowBlkNum))
-    MeMMExecutionHelper.redundancyCoGroupMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,master,slaves,sc)
+
+    MeMMExecutionHelper.CubeMM(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
+//    MeMMExecutionHelper.redundancyCoGroupMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,master,slaves,sc)
 //    MeMMExecutionHelper.redundancyInnerMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 //    MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 //    if (leftTotalBlkNum <= limitNumBlk && leftTotalBlkNum <= rightTotalBlkNum) {

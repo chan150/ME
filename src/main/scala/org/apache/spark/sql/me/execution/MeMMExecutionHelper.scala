@@ -1,6 +1,6 @@
 package org.apache.spark.sql.me.execution
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{MapPartitionsRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.me.serializer.DMatrixSerializer
@@ -18,36 +18,152 @@ import scala.collection.mutable
 
 object MeMMExecutionHelper {
 
+  def CubeMM(p:Int, q:Int, k:Int,
+             left: RDD[InternalRow], right: RDD[InternalRow],
+             leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int,
+             master:String, slaves:Array[String],
+             sc: SparkContext): RDD[InternalRow] = {
+
+    val leftRowsInPartition = if(leftRowBlkNum < p) leftRowBlkNum.toDouble else ((leftRowBlkNum * 1.0) / (p * 1.0))
+    val leftColsInPartition = if(leftColBlkNum < k) leftColBlkNum.toDouble else ((leftColBlkNum * 1.0) / (k * 1.0))
+
+//    Math.floor(j * 1.0 /(colsInPartition*1.0)).toInt
+    val leftRDD = left.flatMap{ row =>
+      val i = row.getInt(1)
+      val k = row.getInt(2)
+      val mat = row.getStruct(3, 7)
+
+      (0 until q).map{ j =>
+        ((Math.floor(i * 1.0 / leftRowsInPartition).toInt, j, Math.floor(k * 1.0 / leftColsInPartition).toInt ),((i, k), mat))
+      }
+    }
+
+    val rightRowsInPartition = if(rightRowBlkNum < k) rightRowBlkNum.toDouble else ((rightRowBlkNum * 1.0) / (k * 1.0))
+    val rightColsInPartition = if(rightColBlkNum < q) rightColBlkNum.toDouble else ((rightColBlkNum * 1.0) / (q * 1.0))
+
+    val rightRDD = right.flatMap{ row =>
+      val k = row.getInt(1)
+      val j = row.getInt(2)
+      val mat = row.getStruct(3, 7)
+
+      (0 until p).map{ i =>
+        ((i, Math.floor(j * 1.0/ rightColsInPartition).toInt, Math.floor(k * 1.0 / rightRowsInPartition).toInt),((k, j), mat))
+      }
+    }
+
+    val CubePart = new CubePartitioner(p, q, k)
+
+
+    val test = new CoLocatedMatrixRDD[(Int, Int, Int)](sc, Seq(leftRDD, rightRDD), CubePart, k, master, slaves, leftRowBlkNum, rightColBlkNum)
+      .mapValues { case Array(vs, w1s) =>
+        (vs.asInstanceOf[Iterable[(((Int, Int), InternalRow))]], w1s.asInstanceOf[Iterable[(((Int, Int), InternalRow))]])
+      }
+    println(test.partitioner)
+
+//    val cleanF = sc.clean(f)
+//    new MapPartitionsRDD[(scala.Iterable[((Int, Int), InternalRow)], (scala.Iterable[((Int, Int), InternalRow)]](test, (context, pid, iter) => iter.flatMap(cleanF))
+//
+//    new MapPartitionsRDD[]()
+
+
+    val newBlocks = test.mapPartitions( { case a =>
+      val partition = a.next()
+      val (key, (leftBlocks, rightBlocks)) = (partition._1, (partition._2._1, partition._2._2))
+      val res = findResultCube(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
+//      println(s"key: $key, result: $res")
+      val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
+//
+//      println(s"key: $key, leftBlocks: ${leftBlocks.toMap.keys}")
+//      println(s"key: $key, rightBlocks: ${rightBlocks.toMap.keys}")
+
+      res.map{ case (row, col) =>
+        leftBlocks.filter(row == _._1._1).map{ case a =>
+          rightBlocks.filter(col == _._1._2).filter(a._1._2 == _._1._1).map{ case b =>
+//            println(s"key: $key, a: ${a._1}, b: ${b._1}")
+            if(!tmp.contains((row, col))){
+              tmp.put((row, col), Block.matrixMultiplication(
+                DMatrixSerializer.deserialize(a._2),
+                DMatrixSerializer.deserialize(b._2)
+              ))
+            }else {
+              tmp.put((row, col), Block.incrementalMultiply(DMatrixSerializer.deserialize(a._2),DMatrixSerializer.deserialize(b._2), tmp.get((row, col)).get))
+            }
+          }
+        }
+      }
+      println(s"key: $key, temp: ${tmp.keys}")
+      tmp.iterator
+    }, true)
+
+    newBlocks.cartesian()
+
+    if(k == 1){
+      newBlocks.map{ row =>
+        val rid = row._1._1
+        val cid = row._1._2
+
+        val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
+
+        val pid = resultPart.getPartition((rid, cid))
+        val mat = row._2
+        val res = new GenericInternalRow(4)
+        res.setInt(0, pid)
+        res.setInt(1, rid)
+        res.setInt(2, cid)
+        res.update(3, DMatrixSerializer.serialize(mat))
+        res
+      }
+    } else{
+
+
+
+      println(newBlocks.partitioner)
+      newBlocks.reduceByKey(new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum), (a, b) => Block.add(a, b)).map{ row =>
+        val rid = row._1._1
+        val cid = row._1._2
+
+        println(s"In reduce, $rid, $cid")
+        val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
+
+        val pid = resultPart.getPartition((rid, cid))
+        val mat = row._2
+        val res = new GenericInternalRow(4)
+        res.setInt(0, pid)
+        res.setInt(1, rid)
+        res.setInt(2, cid)
+        res.update(3, DMatrixSerializer.serialize(mat))
+        res.asInstanceOf[InternalRow]
+      }
+    }
+  }
+
+  private def findResultCube(key:(Int, Int, Int), part:CubePartitioner, rows:Int, cols:Int, rowsInPartition:Int, colsInPartition:Int):scala.collection.mutable.HashSet[(Int, Int)] = {
+    val tmp = new mutable.HashSet[(Int, Int)]()
+    val p = part.p
+    val q = part.q
+    val k = part.k
+
+    val pid = (part.getPartition(key) / k)
+
+    println(s"key: $key, pid : ${part.getPartition(key)}, result pid: $pid")
+
+    val colsBase = pid % q
+    val rowsBase = pid / q
+
+    (0 to cols - 1).filter(i => colsBase == Math.floor(i*1.0/colsInPartition*1.0).toInt).flatMap{ col =>
+      (0 to rows -1).filter(j => rowsBase == Math.floor(j*1.0/rowsInPartition*1.0).toInt).map( row =>
+        tmp += ((row, col))
+      )
+    }
+    tmp
+  }
+
   def redundancyCoGroupMM(p:Int, q:Int,
                           left: RDD[InternalRow], right: RDD[InternalRow],
                           leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int,
                           master:String, slaves:Array[String],
                           sc: SparkContext): RDD[InternalRow] = {
 
-//    val a = left.flatMap{ row =>
-//      val i = row.getInt(1)
-//      val k = row.getInt(2)
-//      val matrix = row.getStruct(3, 7)
-//
-//      (0 until rightColBlkNum).map(j => ((i, (j/2).toInt, k), matrix))
-//    }
-//
-//    val b = right.flatMap{ row =>
-//      val k = row.getInt(1)
-//      val j = row.getInt(2)
-//      val matrix = row.getStruct(3, 7)
-//
-//      (0 until leftRowBlkNum).map(i => ((i, (j/2).toInt, k), matrix))
-//    }
-//
-//    var count = 0
-//
-//    val c = a.cogroup(b, new RowPartitioner(10, leftRowBlkNum)).map{case (k, (iter1, iter2)) =>
-//      println(s"key: $k, count: $count, a size: ${iter1.size}, b size: ${iter2.size}")
-//        count = count + 1
-//    }
-//
-//    c.count()
 
     val rdd1 = left.flatMap{ row =>
       val rid = row.getInt(1)
@@ -72,7 +188,7 @@ object MeMMExecutionHelper {
     }
 
 
-    new CoLocatedMatrixRDD[Int](sc, Seq(rdd1, rdd2), new IndexPartitioner(p*q, new RedunRowPartitioner(q, p)), 1, master, slaves)
+    new CoLocatedMatrixRDD[Int](sc, Seq(rdd1, rdd2), new IndexPartitioner(p*q, new RedunRowPartitioner(q, p)), 1, master, slaves, leftRowBlkNum, rightColBlkNum)
       .mapValues { case Array(vs, w1s) =>
       (vs.asInstanceOf[Iterable[((Int, Int), InternalRow)]], w1s.asInstanceOf[Iterable[((Int, Int), InternalRow)]])
       }.flatMap{ case (pid, (leftBlocks, rightBlocks)) =>
