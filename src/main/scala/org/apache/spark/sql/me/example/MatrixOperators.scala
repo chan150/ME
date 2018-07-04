@@ -20,7 +20,7 @@ object MatrixOperators {
         .config("spark.shuffle.consolidateFiles", "true")
         .config("spark.shuffle.compress", "false")
         .config("spark.rpc.message.maxSize", "1000")
-        .config("spark.locality.wait", "10s")
+        .config("spark.locality.wait", "100000000s")
         .config("spark.task.cpus", "2")
 //      .config("spark.executor.cores", "12")
 //      .config("spark.executor.memory", "60g")
@@ -60,13 +60,13 @@ object MatrixOperators {
 //    ).toDS()
 
 
-    val leftRowBlkNum = 12
-    val leftColBlkNum = 10
+    val leftRowBlkNum = 120
+    val leftColBlkNum = 100
 
 
 
     val rightRowBlkNum = leftColBlkNum
-    val rightColBlkNum = 10
+    val rightColBlkNum = 100
     val blkSize = 1000
 
     val leftRowNum = leftRowBlkNum * blkSize

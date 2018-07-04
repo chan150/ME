@@ -31,7 +31,7 @@ class GridPartitioner(val p: Int, val q: Int, val numRowBlks:Long, val numColBlk
   }
 
   override def equals(obj: scala.Any): Boolean = {
-    obj.isInstanceOf[GridPartitioner] && numPartitions == obj.asInstanceOf[GridPartitioner].numPartitions
+    obj.isInstanceOf[GridPartitioner] && numPartitions == obj.asInstanceOf[GridPartitioner].numPartitions && p == obj.asInstanceOf[GridPartitioner].p && q == obj.asInstanceOf[GridPartitioner].q
   }
 
   override def hashCode(): Int = {

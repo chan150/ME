@@ -77,7 +77,9 @@ class CoLocatedMatrixRDD[K: ClassTag]( sc: SparkContext,
 
   override def getPartitions: Array[Partition] = {
     val array = new Array[Partition](part.numPartitions)
+//    println(s"CoLocated, getPartitions size: ${part.numPartitions}")
     for (i <- 0 until array.length) {
+//      println(s"CoLocated, ${i}")
       // Each CoGroupPartition will have a dependency per contributing RDD
       array(i) = new CoGroupPartition(i, rdds.zipWithIndex.map { case (rdd, j) =>
         // Assume each RDD contributed a single dependency, and get it
@@ -95,12 +97,8 @@ class CoLocatedMatrixRDD[K: ClassTag]( sc: SparkContext,
     Seq{slaves((split.asInstanceOf[CoGroupPartition].index / range) % slaves.length)}
   }
 
-//  override val partitioner: Some[Partitioner] = Some(part)
-  override val partitioner: Some[Partitioner] = part match{
-    case cube: CubePartitioner => val grid = new GridPartitioner(cube.p, cube.q, numRowBlks, numColBlks).asInstanceOf[Partitioner]
-      Some(grid)
-    case _ => throw new IllegalArgumentException(s"Partitioner not recognized for $part")
-  }
+  override val partitioner: Some[Partitioner] = Some(part)
+
   override def compute(s: Partition, context: TaskContext): Iterator[(K, Array[Iterable[_]])] = {
     val split = s.asInstanceOf[CoGroupPartition]
 //    println(s"in compute, ${split.index}")

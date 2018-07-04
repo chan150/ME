@@ -54,19 +54,10 @@ object MeMMExecutionHelper {
     val CubePart = new CubePartitioner(p, q, k)
 
 
-    val test = new CoLocatedMatrixRDD[(Int, Int, Int)](sc, Seq(leftRDD, rightRDD), CubePart, k, master, slaves, leftRowBlkNum, rightColBlkNum)
+    val newBlocks = new CoLocatedMatrixRDD[(Int, Int, Int)](sc, Seq(leftRDD, rightRDD), CubePart, k, master, slaves, leftRowBlkNum, rightColBlkNum)
       .mapValues { case Array(vs, w1s) =>
         (vs.asInstanceOf[Iterable[(((Int, Int), InternalRow))]], w1s.asInstanceOf[Iterable[(((Int, Int), InternalRow))]])
-      }
-    println(test.partitioner)
-
-//    val cleanF = sc.clean(f)
-//    new MapPartitionsRDD[(scala.Iterable[((Int, Int), InternalRow)], (scala.Iterable[((Int, Int), InternalRow)]](test, (context, pid, iter) => iter.flatMap(cleanF))
-//
-//    new MapPartitionsRDD[]()
-
-
-    val newBlocks = test.mapPartitions( { case a =>
+      }.mapPartitions( { case a =>
       val partition = a.next()
       val (key, (leftBlocks, rightBlocks)) = (partition._1, (partition._2._1, partition._2._2))
       val res = findResultCube(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
@@ -91,11 +82,12 @@ object MeMMExecutionHelper {
           }
         }
       }
-      println(s"key: $key, temp: ${tmp.keys}")
+      println(s"partition id: ${CubePart.getPartition(key)}, key: $key, temp: ${tmp.keys}")
       tmp.iterator
     }, true)
 
-    newBlocks.cartesian()
+    println(newBlocks.partitioner)
+
 
     if(k == 1){
       newBlocks.map{ row =>
@@ -115,10 +107,17 @@ object MeMMExecutionHelper {
       }
     } else{
 
+      val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
 
+//      newBlocks.cartesian()
+//      newBlocks.count()
 
-      println(newBlocks.partitioner)
-      newBlocks.reduceByKey(new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum), (a, b) => Block.add(a, b)).map{ row =>
+     val test =  new CubeToGridRDD[((Int, Int), DistributedMatrix)](sc, newBlocks,p,q,k,resultPart,master,slaves)
+        .reduceByKey(resultPart, (a, b) => Block.add(a, b))
+
+      println(test.partitioner)
+//      newBlocks.reduceByKey((a,b) => Block.add(a, b))
+      test.map{ row =>
         val rid = row._1._1
         val cid = row._1._2
 
@@ -132,7 +131,7 @@ object MeMMExecutionHelper {
         res.setInt(1, rid)
         res.setInt(2, cid)
         res.update(3, DMatrixSerializer.serialize(mat))
-        res.asInstanceOf[InternalRow]
+        res
       }
     }
   }
@@ -145,7 +144,7 @@ object MeMMExecutionHelper {
 
     val pid = (part.getPartition(key) / k)
 
-    println(s"key: $key, pid : ${part.getPartition(key)}, result pid: $pid")
+//    println(s"key: $key, pid : ${part.getPartition(key)}, result pid: $pid")
 
     val colsBase = pid % q
     val rowsBase = pid / q
