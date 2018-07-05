@@ -40,6 +40,7 @@ class Dataset[T] private[me] (@transient val meSession: me.MeSession,
                       leftRowNum: Long, leftColNum: Long,
                       right: Dataset[_], rightRowNum: Long, rightColNum: Long,
                       blkSize: Int, data: Seq[Attribute] = this.queryExecution.analyzed.output): DataFrame = withPlan {
+    println(s"$leftRowNum , $leftColNum : $rightRowNum, $rightColNum")
     MatrixElementMultiplyOperator(p, q, this.logicalPlan, leftRowNum, leftColNum, right.logicalPlan, rightRowNum, rightColNum, blkSize)
   }
 

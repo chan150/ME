@@ -313,21 +313,22 @@ case class MatrixMatrixMultiplicationExecution(
 
 
 //    1, 1, master, slaves
-        //    if(leftColBlkNum == 1 && rightRowBlkNum == 1){
-    //
-    //      if(leftRowBlkNum <= rightColBlkNum){
-    //        MeExecutionHelper.multiplyOuterProductDuplicationLeft(n, left.execute(), right.execute(), rightColBlkNum)
-    //      } else{
-    //        MeExecutionHelper.multiplyOuterProductDuplicationRight(n, left.execute(), right.execute(), leftRowBlkNum)
-    //      }
-    //    } else {
-    ////      MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
-    //    }
+//            if(leftColBlkNum == 1 && rightRowBlkNum == 1){
+//
+//          if(leftRowBlkNum <= rightColBlkNum){
+//            MeExecutionHelper.multiplyOuterProductDuplicationLeft(60, left.execute(), right.execute(), rightColBlkNum)
+//          } else{
+//            MeExecutionHelper.multiplyOuterProductDuplicationRight(60, left.execute(), right.execute(), leftRowBlkNum)
+//          }
+//        } else {
+//          MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
+//        }
 
-//    MeMMExecutionHelper.rmmDuplicationRight(60, matA, matB, leftRowBlkNum, rightColBlkNum)
+//    MeMMExecutionHelper.rmmDuplicationLeft(60, matA, matB, leftRowBlkNum, rightColBlkNum)
 //    MeMMExecutionHelper.cpmm(10, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(10, leftRowBlkNum))
 
-    MeMMExecutionHelper.CubeMM(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
+    MeMMExecutionHelper.CubeMMGPU(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMM(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
 //    MeMMExecutionHelper.redundancyCoGroupMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,master,slaves,sc)
 //    MeMMExecutionHelper.redundancyInnerMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 //    MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
