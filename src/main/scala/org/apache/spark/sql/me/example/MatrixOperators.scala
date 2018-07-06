@@ -51,28 +51,15 @@ object MatrixOperators {
 
     val blkSize = 1000
     val rank = 200
-    val sparsity = 0.1
-//
-//    val b4 = SparseMatrix.sprand(blkSize, blkSize, 0.1, new Random)
-//    val b3 = SparseMatrix.sprand(blkSize, blkSize, 0.5, new Random)
-//    val d1 = DenseMatrix.rand(blkSize, blkSize, new Random)
+    val sparsity = 0.01
 
-//    val A = Seq(
-//      MatrixBlock(-1, 0, 0, b4), MatrixBlock(-1, 0, 1, b4), MatrixBlock(-1, 0, 2, b4), MatrixBlock(-1, 0, 3, b4),
-//      MatrixBlock(-1, 1, 0, b4), MatrixBlock(-1, 1, 1, b4), MatrixBlock(-1, 1, 2, b4), MatrixBlock(-1, 1, 3, b4),
-//      MatrixBlock(-1, 2, 0, b4), MatrixBlock(-1, 2, 1, b4), MatrixBlock(-1, 2, 2, b4), MatrixBlock(-1, 2, 3, b4),
-//      MatrixBlock(-1, 3, 0, b4), MatrixBlock(-1, 3, 1, b4), MatrixBlock(-1, 3, 2, b4), MatrixBlock(-1, 3, 3, b4)
-//    ).toDS()
-
-
-
-    val leftRowBlkNum = 500
-    val leftColBlkNum = 500
+    val leftRowBlkNum = 120
+    val leftColBlkNum = 100
 
 
 
     val rightRowBlkNum = leftColBlkNum
-    val rightColBlkNum = 500
+    val rightColBlkNum = 100
 
 
     val leftRowNum = leftRowBlkNum * blkSize
@@ -82,25 +69,24 @@ object MatrixOperators {
     val rightColNum = rightColBlkNum * blkSize
 
     val blkMemorySize = sparsity * ((blkSize * blkSize * 8) / (1024 * 1024 * 1024 * 1.0))
-    val limitNumBlk = (2 / blkMemorySize).toInt
+    require(blkMemorySize < 2, s"very large block size: ${blkMemorySize}GB")
 
-    var numPart =leftRowBlkNum * leftColBlkNum / limitNumBlk
+    val limitNumBlk = Math.ceil(2.0 / blkMemorySize).toInt
 
-    val V = spark.sparkContext.parallelize(for(i <- 0 until leftRowBlkNum; j <- 0 until leftColBlkNum) yield (i, j),numPart)
+    var numPart = leftRowBlkNum * leftColBlkNum / limitNumBlk
+
+    println(s"number of partition: ${numPart}")
+
+    if(numPart < 1) numPart = 1
+
+    val V = spark.sparkContext.parallelize(for(i <- 0 until leftRowBlkNum; j <- 0 until leftColBlkNum) yield (i, j), numPart)
       .map(coord =>  MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize, sparsity, new Random))).toDS()
 
 
-
-//    val d = Array.fill(blkSize*blkSize)(0.0)
-
-//    val W = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j),rightRowBlkNum * rightColBlkNum)
-//      .map { coord =>
-//        val block: Array[Double] = DenseMatrix.rand(blkSize, rank, new Random()).toArray
-//        (0 until blkSize*rank).map(i => d(i) = block(i))
-//        MatrixBlock(-1, coord._1, coord._2, new DenseMatrix(blkSize, blkSize, d).toSparse)
-//      }.toDS()
-
     numPart =rightRowBlkNum * rightColBlkNum / limitNumBlk
+
+    if(numPart < 1) numPart = 1
+
     val W = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j),numPart)
       .map { coord =>
         MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize, sparsity, new Random))
@@ -127,20 +113,20 @@ object MatrixOperators {
 //    val new1 = newH.divideElement(10,6, tmpRowNum, tmpColNum, W.transpose().matrixMultiply(rightColNum, rightRowNum, W, rightRowNum, rightColNum, blkSize)
 //      .matrixMultiply(rightColNum, rightColNum, H, tmpRowNum, tmpColNum, blkSize ), tmpRowNum, tmpColNum, blkSize)
 
-    val new1 = V.matrixMultiply(leftRowNum, leftColNum, W, rightRowNum, rightColNum, blkSize)
+    val result = V.matrixMultiply(leftRowNum, leftColNum, W, rightRowNum, rightColNum, blkSize)
 
-    new1.explain()
+    result.explain()
 
-    println( new1.rdd.count())
+    println( result.rdd.count())
 
 //    println(result.rdd.partitions.size)
-//    result.rdd.collect().foreach{ row =>
-//
-//      val idx = (row.getInt(1), row.getInt(2))
-//
-//      println(idx + ":")
-//      println(row.get(3).asInstanceOf[DistributedMatrix])
-//    }
+    result.rdd.collect().foreach{ row =>
+
+      val idx = (row.getInt(1), row.getInt(2))
+
+      println(idx + ":")
+      println(row.get(3).asInstanceOf[DistributedMatrix])
+    }
 //    println("matrix element-wise divide test")
 //
 //    val multiply = divided.multiplyElement(2, 5, 4, 4, seq1, 4, 4, 2)

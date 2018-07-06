@@ -70,18 +70,14 @@ object CuBlock {
 
     JCuda.cudaFree(d_A)
     JCuda.cudaFree(d_B)
-//    JCublas2.cublasDestroy(handle)
   }
 
   private def JuMultiplySparseDense(A: SparseMatrix, B: DenseMatrix, C: Pointer, handle: cusparseHandle, descra:cusparseMatDescr): Unit ={
-//    var handle = new cusparseHandle
-//    val descra = new cusparseMatDescr
-//
-//    JCusparse.setExceptionsEnabled(true)
-//    JCuda.setExceptionsEnabled(true)
-    if(!A.isTransposed) {
-      val (rowPtr, colIdx, values) = Block.csc2csr(A)
 
+    if(!A.isTransposed) {
+//      val (rowPtr, colIdx, values) = Block.csc2csr(A)
+
+      val (rowPtr, colIdx, values) = (A.colPtrs, A.rowIndices, A.values)
       val nnz = values.length
 
       val csrRowPtrA = new Pointer()
@@ -100,11 +96,6 @@ object CuBlock {
       JCuda.cudaMalloc(d_B, B.numRows * B.numCols * Sizeof.DOUBLE)
       JCuda.cudaMemcpy(d_B, Pointer.to(B.toArray), B.numRows * B.numCols * Sizeof.DOUBLE, cudaMemcpyKind.cudaMemcpyHostToDevice)
 
-
-      JCusparse.cusparseCreate(handle)
-      JCusparse.cusparseCreateMatDescr(descra)
-      JCusparse.cusparseSetMatType(descra, cusparseMatrixType.CUSPARSE_MATRIX_TYPE_GENERAL)
-      JCusparse.cusparseSetMatIndexBase(descra, cusparseIndexBase.CUSPARSE_INDEX_BASE_ZERO)
 
       JCusparse.cusparseDcsrmm(handle,
         cusparseOperation.CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -121,7 +112,8 @@ object CuBlock {
       JCuda.cudaFree(csrValA)
 
     } else{
-      val (rowPtr, colIdx, values) = Block.csr2csc(A)
+//      val (rowPtr, colIdx, values) = Block.csr2csc(A)
+      val (rowPtr, colIdx, values) = (A.colPtrs, A.rowIndices, A.values)
       val nnz = values.length
 
       val csrRowPtrA = new Pointer()
@@ -141,19 +133,14 @@ object CuBlock {
       JCuda.cudaMemcpy(d_B, Pointer.to(B.toArray), B.numRows * B.numCols * Sizeof.DOUBLE, cudaMemcpyKind.cudaMemcpyHostToDevice)
 
 
-      JCusparse.cusparseCreate(handle)
-      JCusparse.cusparseCreateMatDescr(descra)
-      JCusparse.cusparseSetMatType(descra, cusparseMatrixType.CUSPARSE_MATRIX_TYPE_GENERAL)
-      JCusparse.cusparseSetMatIndexBase(descra, cusparseIndexBase.CUSPARSE_INDEX_BASE_ZERO)
-
       JCusparse.cusparseDcsrmm(handle,
-        cusparseOperation.CUSPARSE_OPERATION_TRANSPOSE,
-        A.numRows, B.numCols, B.numRows, nnz,
-        Pointer.to(Array[Double](1.0)), descra,
-        csrValA, csrRowPtrA, csrColIndA,
-        d_B, B.numRows,
-        Pointer.to(Array[Double](1.0)),
-        C, A.numRows)
+                                cusparseOperation.CUSPARSE_OPERATION_TRANSPOSE,
+                                A.numRows, B.numCols, B.numRows, nnz,
+                                Pointer.to(Array[Double](1.0)), descra,
+                                csrValA, csrRowPtrA, csrColIndA,
+                                d_B, B.numRows,
+                                Pointer.to(Array[Double](1.0)),
+                                C, A.numRows)
 
       JCuda.cudaFree(d_B)
       JCuda.cudaFree(csrColIndA)
