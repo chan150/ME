@@ -8,7 +8,7 @@ import org.apache.spark.{Partitioner, SparkConf}
 
 
 class ColumnPartitioner(n: Int, val numColBlks:Long) extends Partitioner {
-  require(n >= 0, s"Number of partitions cannot be negative but found $n")
+  require(n > 0, s"Number of partitions cannot be negative but found $n")
 
   val colsInPartition = if(numColBlks < n) numColBlks.toDouble else ((numColBlks*1.0)/(n * 1.0))
   override val numPartitions = n

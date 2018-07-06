@@ -307,9 +307,9 @@ case class MatrixMatrixMultiplicationExecution(
     val matA = left.execute()
     val matB = right.execute()
 
-    val p = 6
-    val q = 10
-    val k = 2
+    val p = 120
+    val q = 200
+    val k = 1
 
 
 //    1, 1, master, slaves

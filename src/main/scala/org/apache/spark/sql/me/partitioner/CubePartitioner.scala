@@ -6,7 +6,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.me.serializer.MeSerializer
 
 class CubePartitioner(val p:Int, val q:Int, val k:Int) extends Partitioner {
-  require(p*q*k >= 0, s"Number of partitions cannot be negative but found ${p*q*k}")
+  require(p*q*k > 0, s"Number of partitions cannot be negative but found ${p*q*k}")
 
   override val numPartitions = p*q*k
 

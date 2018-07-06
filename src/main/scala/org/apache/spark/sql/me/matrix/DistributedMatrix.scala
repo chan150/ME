@@ -328,7 +328,7 @@ case class SparseMatrix (override val numRows: Int,
   } else{
     require(colPtrs.length == numCols + 1, s"Expecting ${numCols + 1} colPtrs when numCols = $numCols but got ${colPtrs.length}")
   }
-  require(values.length == colPtrs.last, "The last value of colPtrs must equal the number of elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
+  require(values.length == colPtrs.last, s"The last value of colPtrs must equal the number of elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
 
   def this(
           numRows: Int,

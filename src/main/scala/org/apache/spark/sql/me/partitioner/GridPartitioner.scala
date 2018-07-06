@@ -6,8 +6,8 @@ import org.apache.spark.sql.me.serializer.MeSerializer
 import org.apache.spark.{Partitioner, SparkConf}
 
 class GridPartitioner(val p: Int, val q: Int, val numRowBlks:Long, val numColBlks:Long) extends Partitioner {
-  require(p >= 0, s"value P cannot be negative but found $p")
-  require(q >= 0, s"value Q cannot be negative but found $q")
+  require(p > 0, s"value P cannot be negative but found $p")
+  require(q > 0, s"value Q cannot be negative but found $q")
 
 
 

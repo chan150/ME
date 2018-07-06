@@ -30,26 +30,28 @@ object CuBlock {
 
     val d_A = new Pointer()
     val d_B = new Pointer()
+    JCuda.cudaMalloc(d_A, A.numRows * A.numCols * Sizeof.DOUBLE)
+    JCuda.cudaMalloc(d_B, B.numRows * B.numCols * Sizeof.DOUBLE)
 
-    var stat = JCublas2.cublasSetMatrix(A.numRows, A.numCols, Sizeof.DOUBLE,Pointer.to(A.toArray),A.numRows, d_A, A.numRows)
+    var stat = JCublas2.cublasSetMatrix(A.numRows, A.numCols, Sizeof.DOUBLE,Pointer.to(A.values),A.numRows, d_A, A.numRows)
+
     if(stat != jcublas.cublasStatus.CUBLAS_STATUS_SUCCESS){
       JCuda.cudaFree(d_A)
       JCublas2.cublasDestroy(handle)
       throw new SparkException(s"data download failed")
     }
-
-    stat = JCublas2.cublasSetMatrix(B.numRows, B.numCols, Sizeof.DOUBLE,Pointer.to(B.toArray),B.numRows, d_B, B.numRows)
+    stat = JCublas2.cublasSetMatrix(B.numRows, B.numCols, Sizeof.DOUBLE,Pointer.to(B.values),B.numRows, d_B, B.numRows)
     if(stat != jcublas.cublasStatus.CUBLAS_STATUS_SUCCESS){
       JCuda.cudaFree(d_B)
       JCublas2.cublasDestroy(handle)
       throw new SparkException(s"data download failed")
     }
-    if(!A.isTransposed && !B.isTransposed)
+    if(!A.isTransposed && !B.isTransposed) {
       JCublas2.cublasDgemm(handle,
         jcublas.cublasOperation.CUBLAS_OP_N, jcublas.cublasOperation.CUBLAS_OP_N,
         A.numRows, B.numCols, A.numCols,
         Pointer.to(Array[Double](1.0)), d_A, A.numRows, d_B, B.numRows, Pointer.to(Array[Double](1.0)), C, A.numRows)
-    else if(!A.isTransposed && B.isTransposed)
+    }else if(!A.isTransposed && B.isTransposed)
 
       JCublas2.cublasDgemm(handle,
         jcublas.cublasOperation.CUBLAS_OP_N, jcublas.cublasOperation.CUBLAS_OP_T,
@@ -131,6 +133,7 @@ object CuBlock {
       val d_B = new Pointer()
       JCuda.cudaMalloc(d_B, B.numRows * B.numCols * Sizeof.DOUBLE)
       JCuda.cudaMemcpy(d_B, Pointer.to(B.toArray), B.numRows * B.numCols * Sizeof.DOUBLE, cudaMemcpyKind.cudaMemcpyHostToDevice)
+
 
 
       JCusparse.cusparseDcsrmm(handle,
