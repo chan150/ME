@@ -191,39 +191,39 @@ case class MatrixMatrixMultiplicationExecution(
 
 //  override def metadata: Map[String, String] = right.metadata ++ left.metadata ++ Map((rightRowNum.toString ->rightColNum.toString ))
 
-  override def metadata: Map[String, String] = if(left.metadata.contains("part") && right.metadata.contains("part")){
-    val v = left.metadata.get("part").get
-    val v2 = right.metadata.get("part").get
-
-    if(v.equals(v2)){
-      val newv = v match{
-        case "row" => "col"
-        case "col" => "row"
-        case _ => "error"
-      }
-      Map(("part"-> newv), ("equls" -> "existing"))
-    } else{
-      Map(("part"-> v))
-    }
-
-
-  } else if(left.metadata.contains("part") && !right.metadata.contains("part")){
-    val newV = left.metadata.get("part").get match {
-      case "row" => "col"
-      case "col" => "row"
-      case _ => "error"
-    }
-    Map(("part"-> newV), ("left"-> "existing"))
-  } else if(!left.metadata.contains("part") && right.metadata.contains("part")) {
-    val newV = right.metadata.get("part").get match {
-      case "row" => "col"
-      case "col" => "row"
-      case _ => "error"
-    }
-    Map(("part"-> newV), ("right"-> "existing"))
-  } else{
-    Map(("part"-> "row"), ("notboth" ->"none"))
-  }
+//  override def metadata: Map[String, String] = if(left.metadata.contains("part") && right.metadata.contains("part")){
+//    val v = left.metadata.get("part").get
+//    val v2 = right.metadata.get("part").get
+//
+//    if(v.equals(v2)){
+//      val newv = v match{
+//        case "row" => "col"
+//        case "col" => "row"
+//        case _ => "error"
+//      }
+//      Map(("part"-> newv), ("equls" -> "existing"))
+//    } else{
+//      Map(("part"-> v))
+//    }
+//
+//
+//  } else if(left.metadata.contains("part") && !right.metadata.contains("part")){
+//    val newV = left.metadata.get("part").get match {
+//      case "row" => "col"
+//      case "col" => "row"
+//      case _ => "error"
+//    }
+//    Map(("part"-> newV), ("left"-> "existing"))
+//  } else if(!left.metadata.contains("part") && right.metadata.contains("part")) {
+//    val newV = right.metadata.get("part").get match {
+//      case "row" => "col"
+//      case "col" => "row"
+//      case _ => "error"
+//    }
+//    Map(("part"-> newV), ("right"-> "existing"))
+//  } else{
+//    Map(("part"-> "row"), ("notboth" ->"none"))
+//  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     require(leftColNum == rightRowNum, s"Matrix dimension not match, leftColNum = $leftColNum, rightRowNum =$rightRowNum")
@@ -294,9 +294,9 @@ case class MatrixMatrixMultiplicationExecution(
     println(s"righ: ($rightRowNum, $rightColNum), blkSize: $blkSize")
     println(s"memoryExecutor/nodeParallelism: ${memoryExecutor/nodeParallelism}")
 
-
-    println(s"metadata size: ${metadata.size}")
-    metadata.foreach(println)
+//
+//    println(s"metadata size: ${metadata.size}")
+//    metadata.foreach(println)
 
     val master = sc.master.replace("spark://", "").split(":")(0)
     val slaves = sc.statusTracker.getExecutorInfos.filter(_.host() != master).map{a =>
@@ -307,9 +307,9 @@ case class MatrixMatrixMultiplicationExecution(
     val matA = left.execute()
     val matB = right.execute()
 
-    val p = 120
-    val q = 200
-    val k = 1
+    val p = 12
+    val q = 10
+    val k = 2
 
 
 //    1, 1, master, slaves
