@@ -64,15 +64,17 @@ object MeMMExecutionHelper {
       val partition = a.next()
       val (key, (leftBlocks, rightBlocks)) = (partition._1, (partition._2._1, partition._2._2))
       val res = findResultCube(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
-//      println(s"key: $key, result: $res")
+      println(s"key: $key, result: $res")
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
-//
+////
 //      println(s"key: $key, leftBlocks: ${leftBlocks.toMap.keys}")
 //      println(s"key: $key, rightBlocks: ${rightBlocks.toMap.keys}")
 
+      var teststring =s"key: $key"
       res.map{ case (row, col) =>
         leftBlocks.filter(row == _._1._1).map{ case a =>
           rightBlocks.filter(col == _._1._2).filter(a._1._2 == _._1._1).map{ case b =>
+            teststring = teststring + s", {${a._1}, ${b._1}}"
 //            println(s"key: $key, a: ${a._1}, b: ${b._1}")
             if(!tmp.contains((row, col))){
               tmp.put((row, col), Block.matrixMultiplication(
@@ -85,19 +87,25 @@ object MeMMExecutionHelper {
           }
         }
       }
-      println(s"partition id: ${CubePart.getPartition(key)}, key: $key, temp: ${tmp.keys}")
+
+      println(s"$teststring")
+//      println(s"partition id: ${CubePart.getPartition(key)}, key: $key, temp: ${tmp.keys}")
       tmp.iterator
     }, true)
 
     println(newBlocks.partitioner)
 
 
-    if(k == 1){
-      newBlocks.map{ row =>
+    if(k == 1) {
+      val resultPart = new GridPartitioner(p, q, leftRowBlkNum, rightColBlkNum)
+
+      new CubeToGridRDD[((Int, Int), DistributedMatrix)](sc, newBlocks, p, q, k, resultPart, master, slaves)
+        .reduceByKey(resultPart, (a, b) => Block.add(a, b)).map { row =>
         val rid = row._1._1
         val cid = row._1._2
 
-        val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
+        println(s"In reduce, $rid, $cid")
+        val resultPart = new GridPartitioner(p, q, leftRowBlkNum, rightColBlkNum)
 
         val pid = resultPart.getPartition((rid, cid))
         val mat = row._2
@@ -108,23 +116,20 @@ object MeMMExecutionHelper {
         res.update(3, DMatrixSerializer.serialize(mat))
         res
       }
-    } else{
+    }
+      else{
 
       val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
 
 //      newBlocks.cartesian()
 //      newBlocks.count()
 
-     val test =  new CubeToGridRDD[((Int, Int), DistributedMatrix)](sc, newBlocks,p,q,k,resultPart,master,slaves)
-        .reduceByKey(resultPart, (a, b) => Block.add(a, b))
-
-      println(test.partitioner)
-//      newBlocks.reduceByKey((a,b) => Block.add(a, b))
-      test.map{ row =>
+      new CubeToGridRDD[((Int, Int), DistributedMatrix)](sc, newBlocks,p,q,k,resultPart,master,slaves)
+        .reduceByKey(resultPart, (a, b) => Block.add(a, b)).map{ row =>
         val rid = row._1._1
         val cid = row._1._2
 
-        println(s"In reduce, $rid, $cid")
+        //        println(s"In reduce, $rid, $cid")
         val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
 
         val pid = resultPart.getPartition((rid, cid))
@@ -333,76 +338,122 @@ object MeMMExecutionHelper {
         val (key, (leftBlocks, rightBlocks)) = (partition._1, (partition._2._1, partition._2._2))
         val res = findResultCube(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
 
+
         val (rowIdx, colIdx) = findResultCubeStream(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
-//        colIdx.map(a => println(s"key: $key, Idx: $a"))
-//        println(s"key:${key}, ${rowIdx.foreach(println)}")
+//        colIdx.map(a => println(s"col key: $key, Idx: $a"))
+//        rowIdx.map(a => println(s"row key: $key, Idx: $a"))
+        println(s"key:${key} \n rowIdx: ${rowIdx.toString()} \n colIdx: ${colIdx.toString()}")
 
-        val numStream = 2
-
-        val Stream = new Array[Int](numStream)
+        var numStream = 2
 
 
-//        rowIdx.map{ row =>
-//          leftBlocks.filter(row == _._1._1).map { a =>
-//
-//
-//          }
-//        }
+        val colByStream = new Array[Int](numStream)
+        val GPUstream = new Array[cudaStream_t](numStream)
 
-        //      println(s"key: $key, result: $res")
+
+
         val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
 
-        //      println(s"key: $key, leftBlocks: ${leftBlocks.toMap.keys}")
-        //      println(s"key: $key, rightBlocks: ${rightBlocks.toMap.keys}")
 
-        res.map{ case (row, col) =>
-          val Cublas = new jcublas.cublasHandle
+        val Cublas = new jcublas.cublasHandle
 
-          //      var stat = jcublas.JCublas2.cublasCreate(Cublas)
-          //      require(stat != jcublas.cublasStatus.CUBLAS_STATUS_SUCCESS, s"CUBLAS initialization failed")
+        JCublas.cublasInit()
+        val Cusparse = new cusparseHandle
+        val descra = new cusparseMatDescr
 
-          JCublas.cublasInit()
-          val Cusparse = new cusparseHandle
-          val descra = new cusparseMatDescr
+        JCusparse.setExceptionsEnabled(true)
+        JCuda.setExceptionsEnabled(true)
 
-          JCusparse.setExceptionsEnabled(true)
-          JCuda.setExceptionsEnabled(true)
-          //        var count = 0
-          val d_C = new Pointer()
-          var cudaStat = JCuda.cudaMalloc(d_C, blksize*blksize*Sizeof.DOUBLE)
+        JCusparse.cusparseCreate(Cusparse)
+        JCusparse.cusparseCreateMatDescr(descra)
+        JCusparse.cusparseSetMatType(descra, cusparseMatrixType.CUSPARSE_MATRIX_TYPE_GENERAL)
+        JCusparse.cusparseSetMatIndexBase(descra, cusparseIndexBase.CUSPARSE_INDEX_BASE_ZERO)
+
+
+        val resultC = new Array[Pointer](numStream)
+
+        (0 until numStream).map{i =>
+          GPUstream(i) = new cudaStream_t
+          JCuda.cudaStreamCreate(GPUstream(i))
+          resultC(i) = new Pointer()
+          val cudaStat = JCuda.cudaMalloc(resultC(i), blksize*blksize*Sizeof.DOUBLE)
           require(cudaStat == jcuda.runtime.cudaError.cudaSuccess, s"GPU memory allocation failed")
-
-          JCusparse.cusparseCreate(Cusparse)
-          JCusparse.cusparseCreateMatDescr(descra)
-          JCusparse.cusparseSetMatType(descra, cusparseMatrixType.CUSPARSE_MATRIX_TYPE_GENERAL)
-          JCusparse.cusparseSetMatIndexBase(descra, cusparseIndexBase.CUSPARSE_INDEX_BASE_ZERO)
-
-          leftBlocks.filter(row == _._1._1).map{ case a =>
-            rightBlocks.filter(col == _._1._2).filter(a._1._2 == _._1._1).foreach{ case b =>
-              //            println(s"key: $key, a: ${a._1}, b: ${b._1}")
-              CuBlock.JcuGEMM(DMatrixSerializer.deserialize(a._2), DMatrixSerializer.deserialize(b._2), d_C, Cublas, Cusparse, descra)
-              //            count = 1+count
-              //              println(s"key:$row, $col, a: ${a._1}, b: ${b._1}, #GPUcall: $count")
-            }
-          }
-          //        count = 0
-
-          val resultBlock = DenseMatrix.zeros(blksize, blksize).values
-
-          JCuda.cudaMemcpy(Pointer.to(resultBlock), d_C, blksize* blksize * Sizeof.DOUBLE, cudaMemcpyKind.cudaMemcpyDeviceToHost)
-
-          JCuda.cudaFree(d_C)
-          tmp.put((row, col), DistributedMatrix.dense(blksize, blksize, resultBlock))
-
-          JCublas.cublasShutdown()
-          JCusparse.cusparseDestroyMatDescr(descra)
-          JCusparse.cusparseDestroy(Cusparse)
 
         }
 
+        rowIdx.map{ row =>
 
-        //      JCublas2.cublasDestroy(Cublas)
-        //      println(s"partition id: ${CubePart.getPartition(key)}, key: $key, temp: ${tmp.keys}")
+
+
+          val colIdxIter = colIdx.iterator
+          while(colIdxIter.hasNext) {
+            var count = 0
+            (0 until numStream).map { i =>
+
+              if (colIdxIter.hasNext) {
+                JCuda.cudaMemset(resultC(i), 0, blksize * blksize * Sizeof.DOUBLE)
+                colByStream(i) = colIdxIter.next()
+
+                count = count + 1
+              } else {
+                JCuda.cudaFree(resultC(i))
+              }
+            }
+
+
+            numStream = count
+
+            var test = 0
+            leftBlocks.filter(row == _._1._1).map { a =>
+              val column = ""
+              colByStream.map(i => column + i.toString + ", ")
+
+              println(s"key:$key, current row: $row, in row: ${a._1}, col: ${column} numStream: $numStream")
+
+              test = test + 1
+              CuBlock.JcuGEMMStream(a, rightBlocks, colByStream, numStream, resultC, Cublas, Cusparse, descra, GPUstream)
+
+              //            count = 0
+              //            (0 until numStream).map{ i =>
+              //
+              //
+              //              if(colIdxIter.hasNext){
+              //                JCuda.cudaMemset(resultC(i), 0, blksize*blksize*Sizeof.DOUBLE)
+              //                colByStream(i) = colIdxIter.next()
+              //
+              //                count = count + 1
+              //              }else{
+              //                JCuda.cudaFree(resultC(i))
+              //              }
+              //            }
+              //            numStream = count
+            }
+
+            val resultBlock = Array.ofDim[Double](numStream, blksize * blksize)
+
+            (0 until numStream).map { i =>
+
+              resultBlock(i) = DenseMatrix.zeros(blksize, blksize).values
+
+              JCuda.cudaMemcpyAsync(Pointer.to(resultBlock(i)), resultC(i), blksize * blksize * Sizeof.DOUBLE, cudaMemcpyKind.cudaMemcpyDeviceToHost, GPUstream(i))
+
+              tmp.put((row, colByStream(i)), DistributedMatrix.dense(blksize, blksize, resultBlock(i)))
+
+              //            JCuda.cudaFree(resultC(i))
+            }
+          }
+
+        }
+
+        (0 until numStream).map{ i =>
+          JCuda.cudaFree(resultC(i))
+          JCuda.cudaStreamDestroy(GPUstream(i))
+        }
+
+        JCublas.cublasShutdown()
+        JCusparse.cusparseDestroyMatDescr(descra)
+        JCusparse.cusparseDestroy(Cusparse)
+
         tmp.iterator
       }, true)
 

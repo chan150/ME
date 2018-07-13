@@ -324,15 +324,15 @@ case class MatrixMatrixMultiplicationExecution(
 //          MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
 //        }
 
-//    MeMMExecutionHelper.rmmDuplicationLeft(60, matA, matB, leftRowBlkNum, rightColBlkNum)
-//    MeMMExecutionHelper.cpmm(10, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(10, leftRowBlkNum))
+    MeMMExecutionHelper.rmmDuplicationRight(10, matA, matB, leftRowBlkNum, rightColBlkNum)
+//    MeMMExecutionHelper.cpmm(120, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(120, leftRowBlkNum))
+//      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 
 //    MeMMExecutionHelper.CubeMMGPU(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
-    MeMMExecutionHelper.CubeMMStreamGPU(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMMStreamGPU(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
 //    MeMMExecutionHelper.CubeMM(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
 //    MeMMExecutionHelper.redundancyCoGroupMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,master,slaves,sc)
 //    MeMMExecutionHelper.redundancyInnerMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
-//    MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 //    if (leftTotalBlkNum <= limitNumBlk && leftTotalBlkNum <= rightTotalBlkNum) {
     ////      val n = if (TaskParallelism > rightColBlkNum) rightColBlkNum else TaskParallelism
     ////      println(s"In rmmDuplicationLeft, number of partition: $n")

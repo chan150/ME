@@ -10,6 +10,8 @@ import jcuda.runtime._
 import jcuda.driver.CUmodule
 import jcuda.driver.CUdevice_attribute
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.me.serializer.DMatrixSerializer
 
 object CuBlock {
   def JcuGEMM(A: DistributedMatrix, B: DistributedMatrix, C: Pointer, Cublas:cublasHandle, Cuspasrs:cusparseHandle, descra:cusparseMatDescr) : Unit ={
@@ -78,6 +80,8 @@ object CuBlock {
 
     if(!A.isTransposed) {
 //      val (rowPtr, colIdx, values) = Block.csc2csr(A)
+
+
 
       val (rowPtr, colIdx, values) = (A.colPtrs, A.rowIndices, A.values)
       val nnz = values.length
@@ -150,5 +154,166 @@ object CuBlock {
       JCuda.cudaFree(csrRowPtrA)
       JCuda.cudaFree(csrValA)
     }
+  }
+
+  def JcuGEMMStream(a: ((Int, Int), InternalRow),
+                    rightBlocks: scala.Iterable[((Int, Int), InternalRow)],
+                    colByStream: Array[Int], numStream: Int, resultC: Array[Pointer],
+                    Cublas:cublasHandle, Cuspasrs:cusparseHandle, descra:cusparseMatDescr,
+                    GPUstream: Array[cudaStream_t]) : Unit ={
+//    require(A.numCols == B.numRows , s"dimension mismatch a.numCols = ${A.numRows}, B.numRows = ${B.numRows}")
+
+    val A = DMatrixSerializer.deserialize(a._2)
+    A match {
+      case dense: DenseMatrix =>
+          val d_A = new Pointer()
+          JCuda.cudaMalloc(d_A, A.numRows * A.numCols * Sizeof.DOUBLE)
+
+          var stat = JCublas2.cublasSetMatrix(A.numRows, A.numCols, Sizeof.DOUBLE,Pointer.to(dense.values),dense.numRows, d_A, dense.numRows)
+
+          if(stat != jcublas.cublasStatus.CUBLAS_STATUS_SUCCESS){
+            JCuda.cudaFree(d_A)
+            JCublas2.cublasDestroy(Cublas)
+            throw new SparkException(s"data download failed")
+          }
+
+          val d_B = new Array[Pointer](numStream)
+
+
+          (0 until numStream).map{i =>
+            d_B(i) = new Pointer()
+            JCuda.cudaMalloc(d_B(i), dense.numRows * dense.numCols * Sizeof.DOUBLE)
+          }
+
+          (0 until numStream).map(i => rightBlocks.filter(colByStream(i) == _._1._2).filter(a._1._2 == _._1._1).map{b =>
+
+
+            JuMultiplyDenseDenseStream(d_A,
+              DMatrixSerializer.deserialize(b._2) match{
+                case mb: DenseMatrix => mb
+                case mb: SparseMatrix => mb.toDense
+              }, resultC(i), Cublas, GPUstream(i), d_B(i), A.isTransposed)
+
+            JCuda.cudaStreamSynchronize(GPUstream(i))
+            JCuda.cudaFree(d_B(i))
+          })
+
+          JCuda.cudaFree(d_A)
+
+      case sparse: SparseMatrix =>
+//        JuMultiplySparseDenseStream(ma, mb, C, Cuspasrs, descra, stream)
+
+        if(!sparse.isTransposed){
+
+//          JCuda.cudaDeviceSynchronize()
+
+          val (rowPtr, colIdx, values) = (sparse.colPtrs, sparse.rowIndices, sparse.values)
+          val nnz = values.length
+
+          val csrRowPtrA = new Pointer()
+          val csrColIndA = new Pointer()
+          val csrValA = new Pointer()
+
+          JCuda.cudaMalloc(csrRowPtrA, rowPtr.length * Sizeof.INT)
+          JCuda.cudaMalloc(csrColIndA, colIdx.length * Sizeof.INT)
+          JCuda.cudaMalloc(csrValA, nnz * Sizeof.DOUBLE)
+
+          JCuda.cudaMemcpy(csrRowPtrA, Pointer.to(rowPtr), rowPtr.length * Sizeof.INT, cudaMemcpyKind.cudaMemcpyHostToDevice)
+          JCuda.cudaMemcpy(csrColIndA, Pointer.to(colIdx), colIdx.length * Sizeof.INT, cudaMemcpyKind.cudaMemcpyHostToDevice)
+          JCuda.cudaMemcpy(csrValA, Pointer.to(values), values.length * Sizeof.DOUBLE, cudaMemcpyKind.cudaMemcpyHostToDevice)
+
+          val d_B = new Array[Pointer](numStream)
+
+
+          (0 until numStream).map{i =>
+            d_B(i) = new Pointer()
+            JCuda.cudaMalloc(d_B(i), sparse.numRows * sparse.numCols * Sizeof.DOUBLE)
+          }
+          var test = 0
+//          println(s"left block: ${a._1}, ${colByStream(0)}, ${colByStream(1)}")
+
+          (0 until numStream).map(i => rightBlocks.filter(colByStream(i) == _._1._2).filter(a._1._2 == _._1._1).map{b =>
+            test = test + 1
+            println(s"row: ${a._1}, b:${b._1}, col by stream: ${colByStream(i)}")
+
+            JuMultiplySparseDenseStream(csrColIndA, csrRowPtrA, csrValA, A.numRows, A.numCols, nnz,
+              DMatrixSerializer.deserialize(b._2) match{
+                case mb: DenseMatrix => mb
+                case mb: SparseMatrix => mb.toDense
+              }, resultC(i), Cuspasrs, descra, GPUstream(i), d_B(i))
+
+            JCuda.cudaStreamSynchronize(GPUstream(i))
+            JCuda.cudaFree(d_B(i))
+          })
+
+
+//          println(s"inner count: ${test}")
+          JCuda.cudaFree(csrColIndA)
+          JCuda.cudaFree(csrRowPtrA)
+          JCuda.cudaFree(csrValA)
+
+        }else{
+
+        }
+
+
+      case _ =>
+        new SparkException(s"incrementalMultiply does not apply to a: ${A.getClass}")
+    }
+  }
+
+  private def JuMultiplySparseDenseStream(csrColIndA:Pointer, csrRowPtrA:Pointer, csrValA:Pointer, numRows:Int, numCols:Int, nnz: Int,
+                                          B: DenseMatrix, C: Pointer, handle: cusparseHandle, descra:cusparseMatDescr, stream:cudaStream_t, d_B: Pointer): Unit ={
+
+
+      JCusparse.cusparseSetStream(handle, stream)
+
+      JCuda.cudaMemcpyAsync(d_B, Pointer.to(B.values), B.numRows * B.numCols * Sizeof.DOUBLE, cudaMemcpyKind.cudaMemcpyHostToDevice, stream)
+
+
+      JCusparse.cusparseDcsrmm(handle,
+        cusparseOperation.CUSPARSE_OPERATION_NON_TRANSPOSE,
+        numRows, B.numCols, B.numRows, nnz,
+        Pointer.to(Array[Double](1.0)), descra,
+        csrValA, csrRowPtrA, csrColIndA,
+        d_B, B.numRows,
+        Pointer.to(Array[Double](1.0)),
+        C, numRows)
+
+
+
+  }
+
+  private def JuMultiplyDenseDenseStream(d_A: Pointer, B: DenseMatrix, C: Pointer, handle:cublasHandle, stream:cudaStream_t, d_B: Pointer, Atrans:Boolean): Unit ={
+    //    val handle = new jcublas.cublasHandle
+
+    JCublas2.cublasSetStream(handle, stream)
+
+    JCuda.cudaMemcpyAsync(d_B, Pointer.to(B.values), B.numRows * B.numCols * Sizeof.DOUBLE, cudaMemcpyKind.cudaMemcpyHostToDevice, stream)
+
+    if(!Atrans && !B.isTransposed) {
+      JCublas2.cublasDgemm(handle,
+        jcublas.cublasOperation.CUBLAS_OP_N, jcublas.cublasOperation.CUBLAS_OP_N,
+        B.numRows, B.numCols, B.numCols,
+        Pointer.to(Array[Double](1.0)), d_A, B.numRows, d_B, B.numRows, Pointer.to(Array[Double](1.0)), C, B.numRows)
+    }else if(!Atrans && B.isTransposed)
+
+      JCublas2.cublasDgemm(handle,
+        jcublas.cublasOperation.CUBLAS_OP_N, jcublas.cublasOperation.CUBLAS_OP_T,
+        B.numRows, B.numCols, B.numCols,
+        Pointer.to(Array[Double](1.0)), d_A, B.numRows, d_B, B.numRows, Pointer.to(Array[Double](1.0)), C, B.numRows)
+    else if(Atrans && !B.isTransposed)
+
+      JCublas2.cublasDgemm(handle,
+        jcublas.cublasOperation.CUBLAS_OP_T, jcublas.cublasOperation.CUBLAS_OP_N,
+        B.numRows, B.numCols, B.numCols,
+        Pointer.to(Array[Double](1.0)), d_A, B.numRows, d_B, B.numRows, Pointer.to(Array[Double](1.0)), C, B.numRows)
+    else
+
+      JCublas2.cublasDgemm(handle,
+        jcublas.cublasOperation.CUBLAS_OP_T, jcublas.cublasOperation.CUBLAS_OP_T,
+        B.numRows, B.numCols, B.numCols,
+        Pointer.to(Array[Double](1.0)), d_A, B.numRows, d_B, B.numRows, Pointer.to(Array[Double](1.0)), C, B.numRows)
+
   }
 }
