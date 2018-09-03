@@ -292,7 +292,7 @@ case class MatrixMatrixMultiplicationExecution(
 
     println(s"left: ($leftRowNum, $leftColNum), blkSize: $blkSize")
     println(s"righ: ($rightRowNum, $rightColNum), blkSize: $blkSize")
-    println(s"memoryExecutor/nodeParallelism: ${memoryExecutor/nodeParallelism}")
+    println(s"Memory per task: ${memoryExecutor/nodeParallelism}")
 
 //
 //    println(s"metadata size: ${metadata.size}")
@@ -307,8 +307,8 @@ case class MatrixMatrixMultiplicationExecution(
     val matA = left.execute()
     val matB = right.execute()
 
-    val p = 12
-    val q = 10
+    val p = 20
+    val q = 20
     val k = 1
 
 
@@ -324,9 +324,9 @@ case class MatrixMatrixMultiplicationExecution(
 //          MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
 //        }
 
-    MeMMExecutionHelper.rmmDuplicationRight(10, matA, matB, leftRowBlkNum, rightColBlkNum)
+//    MeMMExecutionHelper.rmmDuplicationRight(10, matA, matB, leftRowBlkNum, rightColBlkNum)
 //    MeMMExecutionHelper.cpmm(120, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(120, leftRowBlkNum))
-//      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
+      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, p*q*k)
 
 //    MeMMExecutionHelper.CubeMMGPU(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
 //    MeMMExecutionHelper.CubeMMStreamGPU(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)

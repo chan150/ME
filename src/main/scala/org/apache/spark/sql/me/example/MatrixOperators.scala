@@ -22,8 +22,10 @@ object MatrixOperators {
       .config("spark.shuffle.compress", "false")
       .config("spark.rpc.message.maxSize", "1000")
       .config("spark.network.timeout", "1000000s")
-      .config("spark.locality.wait", "1s")
+      .config("spark.locality.wait", "1000000s")
       .config("spark.task.cpus", "1")
+      .config("spark.reducer.maxSizeInFlight", "256m")
+      .config("spark.shuffle.file.buffer", "256k")
       .getOrCreate()
 
 
@@ -53,13 +55,13 @@ object MatrixOperators {
     val rank = 200
     val sparsity = 0.1
 
-    val leftRowBlkNum = 12
-    val leftColBlkNum = 10
+    val leftRowBlkNum = 120
+    val leftColBlkNum = 120
 
 
 
     val rightRowBlkNum = leftColBlkNum
-    val rightColBlkNum = 10
+    val rightColBlkNum = 120
 
 
     val leftRowNum = leftRowBlkNum * blkSize
@@ -78,7 +80,7 @@ object MatrixOperators {
     println(s"number of partition: ${numPart}, the size of block: ${blkMemorySize}, the limit number of block in a task: ${limitNumBlk}")
 
 
-    val ClusterParallelizm = 240
+    val ClusterParallelizm = 1200
 
     if(numPart < ClusterParallelizm){
       if(leftRowBlkNum * leftColBlkNum < ClusterParallelizm)
@@ -88,8 +90,8 @@ object MatrixOperators {
     }
 
     val V = spark.sparkContext.parallelize(for(i <- 0 until leftRowBlkNum; j <- 0 until leftColBlkNum) yield (i, j), numPart)
-//      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize,sparsity, new Random))).toDS()
-      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.rand(blkSize, blkSize, new Random))).toDS()
+      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize,sparsity, new Random))).toDS()
+//      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.rand(blkSize, blkSize, new Random))).toDS()
 
 
     numPart = rightRowBlkNum * rightColBlkNum / limitNumBlk
@@ -104,8 +106,8 @@ object MatrixOperators {
 
 
     val W = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j), numPart)
-//      .map { coord => MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize,sparsity, new Random))}.toDS()
-      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.rand(blkSize, blkSize, new Random))).toDS()
+      .map { coord => MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize,sparsity, new Random))}.toDS()
+//      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.rand(blkSize, blkSize, new Random))).toDS()
 
 //
 //    val tmpRowBlkNum = 1

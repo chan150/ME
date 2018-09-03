@@ -64,17 +64,17 @@ object MeMMExecutionHelper {
       val partition = a.next()
       val (key, (leftBlocks, rightBlocks)) = (partition._1, (partition._2._1, partition._2._2))
       val res = findResultCube(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
-      println(s"key: $key, result: $res")
+//      println(s"key: $key, result: $res")
       val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
 ////
 //      println(s"key: $key, leftBlocks: ${leftBlocks.toMap.keys}")
 //      println(s"key: $key, rightBlocks: ${rightBlocks.toMap.keys}")
 
-      var teststring =s"key: $key"
+//      var teststring =s"key: $key"
       res.map{ case (row, col) =>
         leftBlocks.filter(row == _._1._1).map{ case a =>
           rightBlocks.filter(col == _._1._2).filter(a._1._2 == _._1._1).map{ case b =>
-            teststring = teststring + s", {${a._1}, ${b._1}}"
+//            teststring = teststring + s"a, b: {${a._1}, ${b._1}}\n"
 //            println(s"key: $key, a: ${a._1}, b: ${b._1}")
             if(!tmp.contains((row, col))){
               tmp.put((row, col), Block.matrixMultiplication(
@@ -88,7 +88,7 @@ object MeMMExecutionHelper {
         }
       }
 
-      println(s"$teststring")
+//      println(s"$teststring")
 //      println(s"partition id: ${CubePart.getPartition(key)}, key: $key, temp: ${tmp.keys}")
       tmp.iterator
     }, true)
@@ -104,7 +104,7 @@ object MeMMExecutionHelper {
         val rid = row._1._1
         val cid = row._1._2
 
-        println(s"In reduce, $rid, $cid")
+//        println(s"In reduce, $rid, $cid")
         val resultPart = new GridPartitioner(p, q, leftRowBlkNum, rightColBlkNum)
 
         val pid = resultPart.getPartition((rid, cid))
@@ -342,9 +342,9 @@ object MeMMExecutionHelper {
         val (rowIdx, colIdx) = findResultCubeStream(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
 //        colIdx.map(a => println(s"col key: $key, Idx: $a"))
 //        rowIdx.map(a => println(s"row key: $key, Idx: $a"))
-        println(s"key:${key} \n rowIdx: ${rowIdx.toString()} \n colIdx: ${colIdx.toString()}")
+//        println(s"key:${key} \n rowIdx: ${rowIdx.toString()} \n colIdx: ${colIdx.toString()}")
 
-        var numStream = 2
+        var numStream = 4
 
 
         val colByStream = new Array[Int](numStream)
@@ -382,51 +382,31 @@ object MeMMExecutionHelper {
         }
 
         rowIdx.map{ row =>
-
-
-
           val colIdxIter = colIdx.iterator
           while(colIdxIter.hasNext) {
             var count = 0
             (0 until numStream).map { i =>
-
               if (colIdxIter.hasNext) {
                 JCuda.cudaMemset(resultC(i), 0, blksize * blksize * Sizeof.DOUBLE)
                 colByStream(i) = colIdxIter.next()
-
                 count = count + 1
               } else {
                 JCuda.cudaFree(resultC(i))
               }
             }
 
-
             numStream = count
 
-            var test = 0
+//            var test = 0
             leftBlocks.filter(row == _._1._1).map { a =>
-              val column = ""
-              colByStream.map(i => column + i.toString + ", ")
+//              val column = ""
+//              colByStream.map(i => column + i.toString + ", ")
 
-              println(s"key:$key, current row: $row, in row: ${a._1}, col: ${column} numStream: $numStream")
+//              println(s"key:$key, current row: $row, in row: ${a._1}, col: ${column} numStream: $numStream")
 
-              test = test + 1
+//              test = test + 1
               CuBlock.JcuGEMMStream(a, rightBlocks, colByStream, numStream, resultC, Cublas, Cusparse, descra, GPUstream)
 
-              //            count = 0
-              //            (0 until numStream).map{ i =>
-              //
-              //
-              //              if(colIdxIter.hasNext){
-              //                JCuda.cudaMemset(resultC(i), 0, blksize*blksize*Sizeof.DOUBLE)
-              //                colByStream(i) = colIdxIter.next()
-              //
-              //                count = count + 1
-              //              }else{
-              //                JCuda.cudaFree(resultC(i))
-              //              }
-              //            }
-              //            numStream = count
             }
 
             val resultBlock = Array.ofDim[Double](numStream, blksize * blksize)
@@ -439,7 +419,6 @@ object MeMMExecutionHelper {
 
               tmp.put((row, colByStream(i)), DistributedMatrix.dense(blksize, blksize, resultBlock(i)))
 
-              //            JCuda.cudaFree(resultC(i))
             }
           }
 
@@ -457,8 +436,6 @@ object MeMMExecutionHelper {
         tmp.iterator
       }, true)
 
-    //    println(newBlocks.count())
-    //    println(newBlocks.partitioner)
 
 
     if(k == 1){
@@ -481,15 +458,12 @@ object MeMMExecutionHelper {
 
       val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
 
-      //      newBlocks.cartesian()
-      //      newBlocks.count()
 
       new CubeToGridRDD[((Int, Int), DistributedMatrix)](sc, newBlocks,p,q,k,resultPart,master,slaves)
         .reduceByKey(resultPart, (a, b) => Block.add(a, b)).map{ row =>
         val rid = row._1._1
         val cid = row._1._2
 
-        //        println(s"In reduce, $rid, $cid")
         val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
 
         val pid = resultPart.getPartition((rid, cid))
@@ -698,7 +672,7 @@ object MeMMExecutionHelper {
     }
   }
 
-  def rmmWithoutPartition(left: RDD[InternalRow], right: RDD[InternalRow], leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int): RDD[InternalRow] ={
+  def rmmWithoutPartition(left: RDD[InternalRow], right: RDD[InternalRow], leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int, Numpartition: Int): RDD[InternalRow] ={
     val leftRDD = left.flatMap{ row =>
       val i = row.getInt(1)
       val k = row.getInt(2)
@@ -715,7 +689,7 @@ object MeMMExecutionHelper {
       (0 to leftRowBlkNum).map(i => ((i, j, k), matrix))
     }
 
-    leftRDD.join(rightRDD).map{ case ((i, j, k), (a, b)) =>
+    leftRDD.join(rightRDD, Numpartition).map{ case ((i, j, k), (a, b)) =>
       ((i, j), Block.matrixMultiplication(DMatrixSerializer.deserialize(a),DMatrixSerializer.deserialize(b)))
     }.reduceByKey{(a, b) => Block.add(a, b)}.map{ row =>
       val rid = row._1._1
