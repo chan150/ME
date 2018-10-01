@@ -23,6 +23,9 @@ object MatrixOperators {
       .config("spark.rpc.message.maxSize", "1000")
       .config("spark.network.timeout", "1000000s")
       .config("spark.locality.wait", "1000000s")
+//      .config("spark.locality.wait", "3s")
+      .config("spark.executor.cores", "2")
+      .config("spark.executor.memory", "10g")
       .config("spark.task.cpus", "1")
       .config("spark.reducer.maxSizeInFlight", "256m")
       .config("spark.shuffle.file.buffer", "256k")
@@ -53,15 +56,16 @@ object MatrixOperators {
 
     val blkSize = 1000
     val rank = 200
-    val sparsity = 0.1
+    val sparsity = 0.01
+    val sparsity1 = 1
 
-    val leftRowBlkNum = 120
-    val leftColBlkNum = 120
+    val leftRowBlkNum = 100
+    val leftColBlkNum = 100
 
 
 
     val rightRowBlkNum = leftColBlkNum
-    val rightColBlkNum = 120
+    val rightColBlkNum = 100
 
 
     val leftRowNum = leftRowBlkNum * blkSize
@@ -71,6 +75,10 @@ object MatrixOperators {
     val rightColNum = rightColBlkNum * blkSize
 
     val blkMemorySize = sparsity * ((blkSize * blkSize * 8) / (1024 * 1024 * 1024 * 1.0))
+
+
+
+
     require(blkMemorySize < 2, s"very large block size: ${blkMemorySize}GB")
 
     val limitNumBlk = Math.ceil(2.0 / blkMemorySize).toInt
@@ -80,18 +88,18 @@ object MatrixOperators {
     println(s"number of partition: ${numPart}, the size of block: ${blkMemorySize}, the limit number of block in a task: ${limitNumBlk}")
 
 
-    val ClusterParallelizm = 1200
+    val ClusterParallelizm = 120
 
     if(numPart < ClusterParallelizm){
       if(leftRowBlkNum * leftColBlkNum < ClusterParallelizm)
         numPart = leftRowBlkNum * leftColBlkNum
       else
-        numPart = ClusterParallelizm
+        numPart = leftRowBlkNum * leftColBlkNum
     }
 
     val V = spark.sparkContext.parallelize(for(i <- 0 until leftRowBlkNum; j <- 0 until leftColBlkNum) yield (i, j), numPart)
-      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize,sparsity, new Random))).toDS()
-//      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.rand(blkSize, blkSize, new Random))).toDS()
+//      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize,sparsity1, new Random))).toDS()
+      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.rand(blkSize, blkSize, new Random))).toDS()
 
 
     numPart = rightRowBlkNum * rightColBlkNum / limitNumBlk
@@ -100,14 +108,14 @@ object MatrixOperators {
       if(rightRowBlkNum * rightColBlkNum < ClusterParallelizm)
         numPart = leftRowBlkNum * leftColBlkNum
       else
-        numPart = ClusterParallelizm
+        numPart = leftRowBlkNum * leftColBlkNum
     }
 
 
 
     val W = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j), numPart)
-      .map { coord => MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize,sparsity, new Random))}.toDS()
-//      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.rand(blkSize, blkSize, new Random))).toDS()
+//      .map { coord => MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize,sparsity, new Random))}.toDS()
+      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.rand(blkSize, blkSize, new Random))).toDS()
 
 //
 //    val tmpRowBlkNum = 1

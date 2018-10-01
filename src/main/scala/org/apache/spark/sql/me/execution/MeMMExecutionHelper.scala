@@ -28,6 +28,8 @@ object MeMMExecutionHelper {
              master:String, slaves:Array[String],
              sc: SparkContext): RDD[InternalRow] = {
 
+    println("CubeMM")
+
     val leftRowsInPartition = if(leftRowBlkNum < p) leftRowBlkNum.toDouble else ((leftRowBlkNum * 1.0) / (p * 1.0))
     val leftColsInPartition = if(leftColBlkNum < k) leftColBlkNum.toDouble else ((leftColBlkNum * 1.0) / (k * 1.0))
 
@@ -70,6 +72,7 @@ object MeMMExecutionHelper {
 //      println(s"key: $key, leftBlocks: ${leftBlocks.toMap.keys}")
 //      println(s"key: $key, rightBlocks: ${rightBlocks.toMap.keys}")
 
+//      var count = 0
 //      var teststring =s"key: $key"
       res.map{ case (row, col) =>
         leftBlocks.filter(row == _._1._1).map{ case a =>
@@ -81,19 +84,21 @@ object MeMMExecutionHelper {
                 DMatrixSerializer.deserialize(a._2),
                 DMatrixSerializer.deserialize(b._2)
               ))
+//              count = 1 + count
             }else {
               tmp.put((row, col), Block.incrementalMultiply(DMatrixSerializer.deserialize(a._2),DMatrixSerializer.deserialize(b._2), tmp.get((row, col)).get))
+//              count = 1 + count
             }
           }
         }
       }
-
-//      println(s"$teststring")
+//      println(s"cnt: $count" + s" $teststring")
+//      println(s"cnt: $count" + s" $teststring" +s" leftBlocks: ${leftBlocks.toMap.keys}" +s" rightBlocks: ${rightBlocks.toMap.keys}")
 //      println(s"partition id: ${CubePart.getPartition(key)}, key: $key, temp: ${tmp.keys}")
       tmp.iterator
     }, true)
 
-    println(newBlocks.partitioner)
+//    println(newBlocks.partitioner)
 
 
     if(k == 1) {
@@ -150,6 +155,8 @@ object MeMMExecutionHelper {
                blksize:Int,
                master:String, slaves:Array[String],
                sc: SparkContext): RDD[InternalRow] = {
+
+    println("CubeMMGPU")
 
     val leftRowsInPartition = if(leftRowBlkNum < p) leftRowBlkNum.toDouble else ((leftRowBlkNum * 1.0) / (p * 1.0))
     val leftColsInPartition = if(leftColBlkNum < k) leftColBlkNum.toDouble else ((leftColBlkNum * 1.0) / (k * 1.0))
@@ -300,6 +307,7 @@ object MeMMExecutionHelper {
                 master:String, slaves:Array[String],
                 sc: SparkContext): RDD[InternalRow] = {
 
+    println("CubeMMStreamGPU")
     val leftRowsInPartition = if(leftRowBlkNum < p) leftRowBlkNum.toDouble else ((leftRowBlkNum * 1.0) / (p * 1.0))
     val leftColsInPartition = if(leftColBlkNum < k) leftColBlkNum.toDouble else ((leftColBlkNum * 1.0) / (k * 1.0))
 
@@ -461,6 +469,189 @@ object MeMMExecutionHelper {
 
       new CubeToGridRDD[((Int, Int), DistributedMatrix)](sc, newBlocks,p,q,k,resultPart,master,slaves)
         .reduceByKey(resultPart, (a, b) => Block.add(a, b)).map{ row =>
+        val rid = row._1._1
+        val cid = row._1._2
+
+        val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
+
+        val pid = resultPart.getPartition((rid, cid))
+        val mat = row._2
+        val res = new GenericInternalRow(4)
+        res.setInt(0, pid)
+        res.setInt(1, rid)
+        res.setInt(2, cid)
+        res.update(3, DMatrixSerializer.serialize(mat))
+        res
+      }
+    }
+  }
+
+  def CubeMMStreamGPUTest(p:Int, q:Int, k:Int,
+                      left: RDD[InternalRow], right: RDD[InternalRow],
+                      leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int,
+                      blksize:Int,
+                      master:String, slaves:Array[String],
+                      sc: SparkContext): RDD[InternalRow] = {
+
+    println("CubeMMStreamGPUw/olocality")
+    val leftRowsInPartition = if(leftRowBlkNum < p) leftRowBlkNum.toDouble else ((leftRowBlkNum * 1.0) / (p * 1.0))
+    val leftColsInPartition = if(leftColBlkNum < k) leftColBlkNum.toDouble else ((leftColBlkNum * 1.0) / (k * 1.0))
+
+    val leftRDD = left.flatMap{ row =>
+      val i = row.getInt(1)
+      val k = row.getInt(2)
+      val mat = row.getStruct(3, 7)
+
+      (0 until q).map{ j =>
+        ((Math.floor(i * 1.0 / leftRowsInPartition).toInt, j, Math.floor(k * 1.0 / leftColsInPartition).toInt ),((i, k), mat))
+      }
+    }
+
+    val rightRowsInPartition = if(rightRowBlkNum < k) rightRowBlkNum.toDouble else ((rightRowBlkNum * 1.0) / (k * 1.0))
+    val rightColsInPartition = if(rightColBlkNum < q) rightColBlkNum.toDouble else ((rightColBlkNum * 1.0) / (q * 1.0))
+
+    val rightRDD = right.flatMap{ row =>
+      val k = row.getInt(1)
+      val j = row.getInt(2)
+      val mat = row.getStruct(3, 7)
+
+      (0 until p).map{ i =>
+        ((i, Math.floor(j * 1.0/ rightColsInPartition).toInt, Math.floor(k * 1.0 / rightRowsInPartition).toInt),((k, j), mat))
+      }
+    }
+
+    val CubePart = new CubePartitioner(p, q, k)
+
+
+    val newBlocks = leftRDD.cogroup(rightRDD, CubePart)
+      .mapPartitions{ case a =>
+        val partition = a.next()
+        val (key, (leftBlocks, rightBlocks)) = (partition._1, (partition._2._1, partition._2._2))
+//        val res = findResultCube(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
+
+
+        val (rowIdx, colIdx) = findResultCubeStream(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
+        //        colIdx.map(a => println(s"col key: $key, Idx: $a"))
+        //        rowIdx.map(a => println(s"row key: $key, Idx: $a"))
+        //        println(s"key:${key} \n rowIdx: ${rowIdx.toString()} \n colIdx: ${colIdx.toString()}")
+
+        var numStream = 4
+
+
+        val colByStream = new Array[Int](numStream)
+        val GPUstream = new Array[cudaStream_t](numStream)
+
+
+
+        val tmp = scala.collection.mutable.HashMap[(Int, Int), DistributedMatrix]()
+
+
+        val Cublas = new jcublas.cublasHandle
+
+        JCublas.cublasInit()
+        val Cusparse = new cusparseHandle
+        val descra = new cusparseMatDescr
+
+        JCusparse.setExceptionsEnabled(true)
+        JCuda.setExceptionsEnabled(true)
+
+        JCusparse.cusparseCreate(Cusparse)
+        JCusparse.cusparseCreateMatDescr(descra)
+        JCusparse.cusparseSetMatType(descra, cusparseMatrixType.CUSPARSE_MATRIX_TYPE_GENERAL)
+        JCusparse.cusparseSetMatIndexBase(descra, cusparseIndexBase.CUSPARSE_INDEX_BASE_ZERO)
+
+
+        val resultC = new Array[Pointer](numStream)
+
+        (0 until numStream).map{i =>
+          GPUstream(i) = new cudaStream_t
+          JCuda.cudaStreamCreate(GPUstream(i))
+          resultC(i) = new Pointer()
+          val cudaStat = JCuda.cudaMalloc(resultC(i), blksize*blksize*Sizeof.DOUBLE)
+          require(cudaStat == jcuda.runtime.cudaError.cudaSuccess, s"GPU memory allocation failed")
+
+        }
+
+        rowIdx.map{ row =>
+          val colIdxIter = colIdx.iterator
+          while(colIdxIter.hasNext) {
+            var count = 0
+            (0 until numStream).map { i =>
+              if (colIdxIter.hasNext) {
+                JCuda.cudaMemset(resultC(i), 0, blksize * blksize * Sizeof.DOUBLE)
+                colByStream(i) = colIdxIter.next()
+                count = count + 1
+              } else {
+                JCuda.cudaFree(resultC(i))
+              }
+            }
+
+            numStream = count
+
+            //            var test = 0
+            leftBlocks.filter(row == _._1._1).map { a =>
+              //              val column = ""
+              //              colByStream.map(i => column + i.toString + ", ")
+
+              //              println(s"key:$key, current row: $row, in row: ${a._1}, col: ${column} numStream: $numStream")
+
+              //              test = test + 1
+              CuBlock.JcuGEMMStream(a, rightBlocks, colByStream, numStream, resultC, Cublas, Cusparse, descra, GPUstream)
+
+            }
+
+            val resultBlock = Array.ofDim[Double](numStream, blksize * blksize)
+
+            (0 until numStream).map { i =>
+
+              resultBlock(i) = DenseMatrix.zeros(blksize, blksize).values
+
+              JCuda.cudaMemcpyAsync(Pointer.to(resultBlock(i)), resultC(i), blksize * blksize * Sizeof.DOUBLE, cudaMemcpyKind.cudaMemcpyDeviceToHost, GPUstream(i))
+
+              tmp.put((row, colByStream(i)), DistributedMatrix.dense(blksize, blksize, resultBlock(i)))
+
+            }
+          }
+
+        }
+
+        (0 until numStream).map{ i =>
+          JCuda.cudaFree(resultC(i))
+          JCuda.cudaStreamDestroy(GPUstream(i))
+        }
+
+        JCublas.cublasShutdown()
+        JCusparse.cusparseDestroyMatDescr(descra)
+        JCusparse.cusparseDestroy(Cusparse)
+
+        tmp.iterator
+      }
+
+
+
+    if(k == 1){
+      newBlocks.map{ row =>
+        val rid = row._1._1
+        val cid = row._1._2
+
+        val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
+
+        val pid = resultPart.getPartition((rid, cid))
+        val mat = row._2
+        val res = new GenericInternalRow(4)
+        res.setInt(0, pid)
+        res.setInt(1, rid)
+        res.setInt(2, cid)
+        res.update(3, DMatrixSerializer.serialize(mat))
+        res
+      }
+    } else{
+
+//      val resultPart = new GridPartitioner(p,q,leftRowBlkNum, rightColBlkNum)
+
+      val Npart = if(p*q < leftRowBlkNum * rightColBlkNum) (leftRowBlkNum * rightColBlkNum) else p*q
+
+      newBlocks.reduceByKey((a, b) => Block.add(a, b)).map{ row =>
         val rid = row._1._1
         val cid = row._1._2
 

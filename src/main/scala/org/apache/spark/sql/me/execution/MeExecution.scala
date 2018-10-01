@@ -294,6 +294,53 @@ case class MatrixMatrixMultiplicationExecution(
     println(s"righ: ($rightRowNum, $rightColNum), blkSize: $blkSize")
     println(s"Memory per task: ${memoryExecutor/nodeParallelism}")
 
+    val leftSparsity = 1
+    val rightSparsity = 1
+
+
+//    val leftSize = leftRowBlkNum * leftColBlkNum * sparsity1 * ((blkSize * blkSize * 8) / (1024 * 1024 * 1024 * 1.0))
+    val leftSize = (leftSparsity * leftRowNum * leftColNum * 8) / ((1024 * 1024 * 1024 * 1.0))
+    val rightSize = (rightSparsity *  rightRowNum * rightColNum * 8) / ((1024 * 1024 * 1024 * 1.0))
+    val resultSize = (1 * leftRowNum * rightColNum * 8) / (1024 * 1024 * 1024 * 1.0)
+
+
+    println(s"Matrix A:$leftSize, B: $rightSize, C: $resultSize")
+
+    val clusterMemory = 600
+
+    val Candidate = for {
+      p <- (1 to leftRowBlkNum)
+      q <- (1 to rightColBlkNum)
+      r <- (1 to rightRowBlkNum)
+      if((leftRowBlkNum % p == 0) && (rightColBlkNum % q == 0) && (rightRowBlkNum % r == 0))
+    } yield (p, q, r)
+
+//    val prunCandidate = Candidate.filter{ case (p, q, r) => (leftSize/(p * r) + rightSize/(q * r) + resultSize/(p * q)) < 1.9}
+    val prunCandidate = Candidate.filter{ case (p, q, r) => (leftSize/(p * r) + rightSize/(q * r)) < 1.6}
+
+    val costs = prunCandidate.map{ case (p, q, r) =>
+      ((p, q, r), q * leftSize + p * rightSize + r * resultSize)
+    }.filter{ case ((p, q, r), cost) =>
+      p * q * r >= TaskParallelism || cost  < clusterMemory
+    }
+
+
+    val sortedCosts = costs.sortBy(x => x._2)
+    for(i <- 0 until 10){
+      println(s"${sortedCosts(i)._1}, cost:${sortedCosts(i)._2} ")
+    }
+
+    val argcost = costs.min(new Ordering[((Int, Int, Int), Double)]{
+      override def compare(x: ((Int, Int, Int), Double), y: ((Int, Int, Int), Double)): Int = {
+        if(x._2 == y._2){
+          x._1._3 compare y._1._3
+        }else {
+          x._2 compare y._2
+        }
+      }
+    })
+
+
 //
 //    println(s"metadata size: ${metadata.size}")
 //    metadata.foreach(println)
@@ -307,10 +354,13 @@ case class MatrixMatrixMultiplicationExecution(
     val matA = left.execute()
     val matB = right.execute()
 
-    val p = 20
-    val q = 20
-    val k = 1
+//    val p = 1
+//    val q = 100
+//    val r = 1
 
+    val (p, q, r) = argcost._1
+
+    println(s"p: $p, q: $q, r: $r, cost:${argcost._2}GB")
 
 //    1, 1, master, slaves
 //            if(leftColBlkNum == 1 && rightRowBlkNum == 1){
@@ -326,10 +376,11 @@ case class MatrixMatrixMultiplicationExecution(
 
 //    MeMMExecutionHelper.rmmDuplicationRight(10, matA, matB, leftRowBlkNum, rightColBlkNum)
 //    MeMMExecutionHelper.cpmm(120, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(120, leftRowBlkNum))
-      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, p*q*k)
+//      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, p*q*k)
 
 //    MeMMExecutionHelper.CubeMMGPU(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
-//    MeMMExecutionHelper.CubeMMStreamGPU(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMMStreamGPU(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+    MeMMExecutionHelper.CubeMMStreamGPUTest(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
 //    MeMMExecutionHelper.CubeMM(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
 //    MeMMExecutionHelper.redundancyCoGroupMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,master,slaves,sc)
 //    MeMMExecutionHelper.redundancyInnerMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
