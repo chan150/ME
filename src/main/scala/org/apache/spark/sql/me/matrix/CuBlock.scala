@@ -183,7 +183,7 @@ object CuBlock {
           }
 
 
-          (0 until numStream).map(i => rightBlocks.filter(colByStream(i) == _._1._2).filter(a._1._2 == _._1._1).map{b =>
+          (0 until numStream).map(i => rightBlocks.filter(colByStream(i) == _._1._2).filter(a._1._2 == _._1._1).map{ b =>
 
             DMatrixSerializer.deserialize(b._2) match{
               case mb: DenseMatrix =>
@@ -197,6 +197,7 @@ object CuBlock {
                   JCublas2.cublasDestroy(Cublas)
                   throw new SparkException(s"data download failed")
                 }
+
                 JuMultiplyDenseDenseStream(d_A, mb, resultC(i), Cublas, GPUstream(i), d_B(i), A.isTransposed)
 
                 JCuda.cudaFree(d_B(i))
@@ -335,7 +336,13 @@ object CuBlock {
 
   }
 
-  private def JuMultiplyDenseDenseStream(d_A: Pointer, B: DenseMatrix, C: Pointer, handle:cublasHandle, stream:cudaStream_t, d_B: Pointer, Atrans:Boolean): Unit ={
+  private def JuMultiplyDenseDenseStream( d_A: Pointer,
+                                          B: DenseMatrix,
+                                          C: Pointer,
+                                          handle:cublasHandle,
+                                          stream:cudaStream_t,
+                                          d_B: Pointer,
+                                          Atrans:Boolean): Unit ={
     //    val handle = new jcublas.cublasHandle
 
     JCuda.cudaMalloc(d_B, B.numRows * B.numCols * Sizeof.DOUBLE)

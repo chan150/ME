@@ -486,6 +486,28 @@ object MeMMExecutionHelper {
     }
   }
 
+  private abstract class MatrixPointer{
+    val isTransposed: Boolean = false
+    val isUploaded: Boolean = false
+  }
+  private class DenseMatrixPointer (val values:Pointer,
+                                    override val isTransposed: Boolean,
+                                    override val isUploaded: Boolean) extends MatrixPointer {
+
+    def this(values: Pointer) = this(values, false, false)
+    def this(values: Pointer, isTransposed:Boolean) = this(values, isTransposed, false)
+  }
+
+  private class SparseMatrixPointer (val colPtrs: Pointer,
+                                     val rowIndices: Pointer,
+                                     val values: Pointer,
+                                     override val isTransposed: Boolean,
+                                     override val isUploaded: Boolean) extends MatrixPointer{
+    def this(colPtrs:Pointer, rowIndices:Pointer, values: Pointer) = this(colPtrs, rowIndices, values, false, false)
+    def this(colPtrs:Pointer, rowIndices:Pointer, values: Pointer, isTransposed: Boolean) = this(colPtrs, rowIndices, values, isTransposed, false)
+  }
+
+
   def CubeMMStreamGPUTest(p:Int, q:Int, k:Int,
                       left: RDD[InternalRow], right: RDD[InternalRow],
                       leftRowBlkNum: Int, leftColBlkNum: Int, rightRowBlkNum: Int, rightColBlkNum: Int,
@@ -527,13 +549,84 @@ object MeMMExecutionHelper {
       .mapPartitions{ case a =>
         val partition = a.next()
         val (key, (leftBlocks, rightBlocks)) = (partition._1, (partition._2._1, partition._2._2))
-//        val res = findResultCube(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
 
 
-        val (rowIdx, colIdx) = findResultCubeStream(key, CubePart, leftRowBlkNum, rightColBlkNum, leftRowsInPartition.toInt, rightColsInPartition.toInt)
-        //        colIdx.map(a => println(s"col key: $key, Idx: $a"))
-        //        rowIdx.map(a => println(s"row key: $key, Idx: $a"))
-        //        println(s"key:${key} \n rowIdx: ${rowIdx.toString()} \n colIdx: ${colIdx.toString()}")
+        val blocksOfA = new scala.collection.mutable.HashMap[(Int,Int), InternalRow]()
+        leftBlocks.map(b => blocksOfA.put(b._1, b._2))
+
+        val blocksOfB = new scala.collection.mutable.HashMap[(Int,Int), InternalRow]()
+        rightBlocks.map(b => blocksOfB.put(b._1, b._2))
+
+        val pt_list = (Math.ceil(key._1*leftRowsInPartition).toInt until Math.floor((key._1+1) * leftRowsInPartition).toInt)
+        val qt_list = (Math.ceil(key._2*rightColsInPartition).toInt until Math.floor((key._2+1) * rightColsInPartition).toInt)
+        val rt_list = (Math.ceil(key._3*leftColsInPartition).toInt until Math.floor((key._3+1) * leftColsInPartition).toInt)
+        val (pSize, qSize, rSize) = (pt_list.size, qt_list.size, rt_list.size)
+
+        val (rowIdx, colIdx) = (pt_list.toList, qt_list.toList)
+
+        val (pt, qt, rt) = (5,5,5)
+
+        val PartitionInTask = new scala.collection.mutable.HashMap[(Int,Int,Int), collection.mutable.HashSet[(Int, Int, Int)]]()
+
+
+        for(p<- 0 until pt; q<- 0 until qt; r <- 0 until rt) {
+          PartitionInTask.put((p,q,r), (new collection.mutable.HashSet[(Int, Int, Int)]()))
+        }
+
+
+        val leftRowsInPTask = if(pSize < pt) pSize.toDouble else ((pSize * 1.0) / (pt * 1.0))
+        val leftColsInPTask = if(rSize < rt) rSize.toDouble else ((rSize * 1.0) / (rt * 1.0))
+//        val rightRowsInPTask = if(rSize < rt) rSize.toDouble else ((rSize * 1.0) / (rt * 1.0))
+        val rightColsInPTask = if(qSize < qt) qSize.toDouble else ((qSize * 1.0) / (qt * 1.0))
+
+
+        for(i <- (0 until pSize);j <- (0 until qSize); k <- (0 until rSize)){
+          val iIdx = Math.floor(i * 1.0 / leftRowsInPTask).toInt
+          val jIdx = Math.floor(j * 1.0/ rightColsInPTask).toInt
+          val kIdx = Math.floor(k * 1.0 / leftColsInPTask).toInt
+          val key = (iIdx, jIdx, kIdx)
+
+          PartitionInTask.put(key, PartitionInTask.get(key).get.+((pt_list(i),qt_list(j), rt_list(k))))
+
+        }
+
+        for(p <- (0 until pt); q <- (0 until qt); r <- (0 until rt)) {
+
+          val voxels = PartitionInTask.get((p,q,r)).get
+
+          val leftBlocksInPart = new collection.mutable.HashMap[(Int, Int), MatrixPointer]()
+          val rightBlocksInPart = new collection.mutable.HashMap[(Int, Int), MatrixPointer]()
+          val resultBlocksInPart = new collection.mutable.HashMap[(Int, Int), MatrixPointer]()
+          val numJ = rightColsInPTask.toInt
+          val jIdx = voxels.map(v => v._2)
+
+
+          for ((i, j, k) <- voxels) {
+            if(blocksOfA.contains((i,k))){
+              DMatrixSerializer.deserialize(blocksOfA.get((i,k)).get) match{
+                case dm: DenseMatrix =>
+                  leftBlocksInPart.put((i,k), new DenseMatrixPointer(new Pointer(), dm.isTransposed))
+                case sm: SparseMatrix =>
+                  leftBlocksInPart.put((i,k), new SparseMatrixPointer(new Pointer(), new Pointer(), new Pointer(), sm.isTransposed))
+                case _ =>
+                  new SparkException(s"the class does not apply")
+              }
+            }
+            if(blocksOfB.contains((k,j))){
+              DMatrixSerializer.deserialize(blocksOfB.get((k,j)).get) match{
+                case dm: DenseMatrix =>
+                  rightBlocksInPart.put((k,j), new DenseMatrixPointer(new Pointer(), dm.isTransposed))
+                case sm: SparseMatrix =>
+                  rightBlocksInPart.put((k,j), new SparseMatrixPointer(new Pointer(), new Pointer(), new Pointer(), sm.isTransposed))
+                case _ =>
+                  new SparkException(s"the class does not apply")
+              }
+            }
+            resultBlocksInPart.put((i, j), new DenseMatrixPointer(new Pointer()))
+          }
+
+
+        }
 
         var numStream = 4
 
