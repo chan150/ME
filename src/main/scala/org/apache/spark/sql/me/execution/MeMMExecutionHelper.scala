@@ -557,9 +557,9 @@ object MeMMExecutionHelper {
         val blocksOfB = new scala.collection.mutable.HashMap[(Int,Int), InternalRow]()
         rightBlocks.map(b => blocksOfB.put(b._1, b._2))
 
-        val pt_list = (Math.floor(key._1*leftRowsInPartition).toInt until Math.ceil((key._1+1) * leftRowsInPartition).toInt)
-        val qt_list = (Math.floor(key._2*rightColsInPartition).toInt until Math.ceil((key._2+1) * rightColsInPartition).toInt)
-        val rt_list = (Math.floor(key._3*leftColsInPartition).toInt until Math.ceil((key._3+1) * leftColsInPartition).toInt)
+        val pt_list = (Math.ceil(key._1*leftRowsInPartition).toInt until Math.floor((key._1+1) * leftRowsInPartition).toInt)
+        val qt_list = (Math.ceil(key._2*rightColsInPartition).toInt until Math.floor((key._2+1) * rightColsInPartition).toInt)
+        val rt_list = (Math.ceil(key._3*leftColsInPartition).toInt until Math.floor((key._3+1) * leftColsInPartition).toInt)
         val (pSize, qSize, rSize) = (pt_list.size, qt_list.size, rt_list.size)
 
         val (rowIdx, colIdx) = (pt_list.toList, qt_list.toList)
