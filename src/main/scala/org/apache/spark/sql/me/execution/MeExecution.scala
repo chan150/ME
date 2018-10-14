@@ -326,9 +326,9 @@ case class MatrixMatrixMultiplicationExecution(
 
 
     val sortedCosts = costs.sortBy(x => x._2)
-    for(i <- 0 until 10){
-      println(s"${sortedCosts(i)._1}, cost:${sortedCosts(i)._2} ")
-    }
+//    for(i <- 0 until 10){
+//      println(s"${sortedCosts(i)._1}, cost:${sortedCosts(i)._2} ")
+//    }
 
     val argcost = costs.min(new Ordering[((Int, Int, Int), Double)]{
       override def compare(x: ((Int, Int, Int), Double), y: ((Int, Int, Int), Double)): Int = {
@@ -376,11 +376,12 @@ case class MatrixMatrixMultiplicationExecution(
 
 //    MeMMExecutionHelper.rmmDuplicationRight(10, matA, matB, leftRowBlkNum, rightColBlkNum)
 //    MeMMExecutionHelper.cpmm(120, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(120, leftRowBlkNum))
-//      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, p*q*k)
-
-//    MeMMExecutionHelper.CubeMMGPU(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
-//    MeMMExecutionHelper.CubeMMStreamGPU(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
-    MeMMExecutionHelper.CubeMMStreamGPUTest(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, 1)
+    MeMMExecutionHelper.rmmWithoutPartitionGPU(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize)
+//    MeMMExecutionHelper.sparseGPU(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize)
+//    MeMMExecutionHelper.CubeMMGPU(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMMStreamGPU(1, 1, 1, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMMStreamGPUTest(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
 //    MeMMExecutionHelper.CubeMM(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
 //    MeMMExecutionHelper.redundancyCoGroupMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,master,slaves,sc)
 //    MeMMExecutionHelper.redundancyInnerMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)

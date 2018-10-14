@@ -49,10 +49,12 @@ object CuBlock {
       throw new SparkException(s"data download failed")
     }
     if(!A.isTransposed && !B.isTransposed) {
-      JCublas2.cublasDgemm(handle,
-        jcublas.cublasOperation.CUBLAS_OP_N, jcublas.cublasOperation.CUBLAS_OP_N,
-        A.numRows, B.numCols, A.numCols,
-        Pointer.to(Array[Double](1.0)), d_A, A.numRows, d_B, B.numRows, Pointer.to(Array[Double](1.0)), C, A.numRows)
+//      JCublas2.cublasDgemm(handle,
+//        jcublas.cublasOperation.CUBLAS_OP_N, jcublas.cublasOperation.CUBLAS_OP_N,
+//        A.numRows, B.numCols, A.numCols,
+//        Pointer.to(Array[Double](1.0)), d_A, A.numRows, d_B, B.numRows, Pointer.to(Array[Double](1.0)), C, A.numRows)
+
+      JCublas.cublasDgemm('n', 'n', A.numRows, A.numRows, A.numRows, 1.0f, d_A, A.numRows, d_B, A.numRows, 1.0f, C, A.numRows)
     }else if(!A.isTransposed && B.isTransposed)
 
       JCublas2.cublasDgemm(handle,

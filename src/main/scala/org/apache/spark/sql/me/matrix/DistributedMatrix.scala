@@ -285,6 +285,11 @@ object DenseMatrix {
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
 
+  def randR(numRows: Int, numCols: Int, rng: java.util.Random): DenseMatrix ={
+    require(numRows.toLong * numCols <= Int.MaxValue, s"$numRows x $numCols dense matrix is too large to allocate")
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(Math.ceil(rng.nextDouble())))
+  }
+
   def randn(numRows: Int, numCols: Int, rng: java.util.Random): DenseMatrix ={
     require(numRows.toLong * numCols <= Int.MaxValue, s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
@@ -565,6 +570,10 @@ object SparseMatrix{
   def sprand(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix ={
     val mat = genRandMatrix(numRows, numCols, density, rng)
     mat.update(i => rng.nextDouble())
+  }
+  def sprandR(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix ={
+    val mat = genRandMatrix(numRows, numCols, density, rng)
+    mat.update(i => Math.ceil(rng.nextDouble()))
   }
 
   def sprandn(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix ={
