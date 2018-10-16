@@ -17,22 +17,26 @@ object MatrixOperators {
       .master("spark://jupiter22:7077")
       .appName("ME")
       .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-      .config("spark.kryoserializer.buffer.max.mb", "512")
-      .config("spark.shuffle.consolidateFiles", "true")
-      .config("spark.shuffle.compress", "false")
+      .config("spark.kryoserializer.buffer.max", "512m")
+      .config("spark.scheduler.mode", "FAIR")
+//      .config("spark.shuffle.consolidateFiles", "true")
+//      .config("spark.shuffle.compress", "false")
       .config("spark.rpc.message.maxSize", "1000")
-      .config("spark.network.timeout", "1000000s")
-      .config("spark.locality.wait", "1000000s")
+      .config("spark.network.timeout", "10000000s")
+//      .config("spark.shuffle.memoryFraction", "0")
+//      .config("spark.locality.wait", "1000000s")
 //      .config("spark.locality.wait", "3s")
-      .config("spark.executor.cores", "2")
-      .config("spark.executor.memory", "10g")
-      .config("spark.task.cpus", "2")
-      .config("spark.reducer.maxSizeInFlight", "256m")
-      .config("spark.shuffle.file.buffer", "256k")
+      .config("spark.executor.cores", "5")
+      .config("spark.executor.memory", "25g")
+      .config("spark.task.cpus", "1")
+//      .config("spark.reducer.maxSizeInFlight", "256m")
+//      .config("spark.shuffle.file.buffer", "512m")
       .getOrCreate()
 
-
-    runMatrixOpElements(meSession)
+    val leftRow = args(0).toInt
+    val leftCol = args(1).toInt
+    val rightCol = args(2).toInt
+    runMatrixOpElements(meSession, leftRow, leftCol, rightCol)
 
 //    runMatrixTranspose(meSession)
 
@@ -44,7 +48,7 @@ object MatrixOperators {
   import scala.reflect.ClassTag
   implicit def kryoEncoder[A](implicit ct: ClassTag[A]) = org.apache.spark.sql.Encoders.kryo[A](ct)
 
-  private def runMatrixOpElements(spark: MeSession): Unit = {
+  private def runMatrixOpElements(spark: MeSession, leftRow:Int, leftCol:Int, rightRow:Int): Unit = {
     import spark.implicits._
 
 //
@@ -58,13 +62,13 @@ object MatrixOperators {
     val sparsity = 0.1
     val sparsity1 = 0.1
 
-    val leftRowBlkNum = 2
-    val leftColBlkNum = 10
+    val leftRowBlkNum = leftRow
+    val leftColBlkNum = leftCol
 
 
 
     val rightRowBlkNum = leftColBlkNum
-    val rightColBlkNum = 6
+    val rightColBlkNum = rightRow
 
 
     val leftRowNum = leftRowBlkNum * blkSize
@@ -82,39 +86,39 @@ object MatrixOperators {
 
     val limitNumBlk = Math.ceil(2.0 / blkMemorySize).toInt
 
-    var numPart = leftRowBlkNum * leftColBlkNum / limitNumBlk
+    var numPart = leftRowBlkNum * leftColBlkNum
 
     println(s"number of partition: ${numPart}, the size of block: ${blkMemorySize}, the limit number of block in a task: ${limitNumBlk}")
 
 
-    val ClusterParallelizm = 120
+    val ClusterParallelizm = 100
 
     if(numPart < ClusterParallelizm){
       if(leftRowBlkNum * leftColBlkNum < ClusterParallelizm)
         numPart = leftRowBlkNum * leftColBlkNum
-      else
-        numPart = leftRowBlkNum * leftColBlkNum
+      else if(leftRowBlkNum * leftColBlkNum > ClusterParallelizm)
+        numPart = ClusterParallelizm
     }
 
-    val V = spark.sparkContext.parallelize(for(i <- 0 until leftRowBlkNum; j <- 0 until leftColBlkNum) yield (i, j), numPart)
+    val V = spark.sparkContext.parallelize(for(i <- 0 until leftRowBlkNum; j <- 0 until leftColBlkNum) yield (i, j), numPart/2)
 //      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize,sparsity1, new Random))).toDS()
       .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.randR(blkSize, blkSize, new Random))).toDS()
 
 
-    numPart = rightRowBlkNum * rightColBlkNum / limitNumBlk
+    numPart = rightRowBlkNum * rightColBlkNum
 
     if(numPart < ClusterParallelizm){
       if(rightRowBlkNum * rightColBlkNum < ClusterParallelizm)
         numPart = leftRowBlkNum * leftColBlkNum
       else
-        numPart = leftRowBlkNum * leftColBlkNum
+        numPart = ClusterParallelizm
     }
 
 
 
-    val W = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j), numPart)
+    val W = spark.sparkContext.parallelize(for(i <- 0 until rightRowBlkNum; j <- 0 until rightColBlkNum) yield (i, j), numPart/2)
 //      .map { coord => MatrixBlock(-1, coord._1, coord._2, SparseMatrix.sprand(blkSize, blkSize,sparsity, new Random))}.toDS()
-      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.rand(blkSize, blkSize, new Random))).toDS()
+      .map(coord =>  MatrixBlock(-1, coord._1, coord._2, DenseMatrix.randR(blkSize, blkSize, new Random))).toDS()
 
 //
 //    val tmpRowBlkNum = 1

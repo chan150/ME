@@ -316,12 +316,13 @@ case class MatrixMatrixMultiplicationExecution(
     } yield (p, q, r)
 
 //    val prunCandidate = Candidate.filter{ case (p, q, r) => (leftSize/(p * r) + rightSize/(q * r) + resultSize/(p * q)) < 1.9}
-    val prunCandidate = Candidate.filter{ case (p, q, r) => (leftSize/(p * r) + rightSize/(q * r)) < 1.6}
+    val prunCandidate = Candidate.filter{ case (p, q, r) => (leftSize/(p * r) + rightSize/(q * r)+ resultSize/(p * q)) < 5.0}
 
     val costs = prunCandidate.map{ case (p, q, r) =>
       ((p, q, r), q * leftSize + p * rightSize + r * resultSize)
-    }.filter{ case ((p, q, r), cost) =>
-      p * q * r >= TaskParallelism || cost  < clusterMemory
+    }
+      .filter{ case ((p, q, r), cost) =>
+      p * q * r >= TaskParallelism
     }
 
 
@@ -374,15 +375,80 @@ case class MatrixMatrixMultiplicationExecution(
 //          MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
 //        }
 
-//    MeMMExecutionHelper.rmmDuplicationRight(10, matA, matB, leftRowBlkNum, rightColBlkNum)
+
+    val MM = "cpmm"
+    val device ="gpu"
+
+    if(MM == "cube") {
+
+      if(device == "gpu")
+      /* cubeMM*/
+        MeMMExecutionHelper.CubeMMStreamGPUTest(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+      else{
+        val prunCandidate2 = Candidate.filter{ case (p, q, r) => (leftSize/(p * r) + rightSize/(q * r)+ resultSize/(p * q)) < 3.0}
+
+        val costs2 = prunCandidate.map{ case (p, q, r) =>
+          ((p, q, r), q * leftSize + p * rightSize + r * resultSize)
+        }
+          .filter{ case ((p, q, r), cost) =>
+            p * q * r >= 500
+          }
+
+        val sortedCosts = costs2.map(x => ((x._1, x._1._1*x._1._2*x._1._3), x._2)).sortBy(x => (x._2, -x._1._2))
+        for(i <- 0 until 3){
+          println(s"${sortedCosts(i)._1}, cost:${sortedCosts(i)._2} ")
+        }
+
+        val argcost2 = costs2.min(new Ordering[((Int, Int, Int), Double)]{
+          override def compare(x: ((Int, Int, Int), Double), y: ((Int, Int, Int), Double)): Int = {
+              if (x._2 == y._2) {
+                x._1._3 compare y._1._3
+              } else {
+                x._2 compare y._2
+              }
+            }
+        })
+
+        val (cpu_p, cpu_q, cpu_r) = argcost2._1
+        println(s"p: $cpu_p, q: $cpu_q, r: $cpu_r, cost:${argcost2._2}GB")
+        MeMMExecutionHelper.CubeMM(cpu_p, cpu_q, cpu_r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
+      }
+    }
+    /* BroadcastMM */
+    else if(MM == "bmm") {
+      println("bmm")
+//      val numPart = TaskParallelism
+
+      MeMMExecutionHelper.CubeMMStreamGPUTest(1, leftColBlkNum, 1, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+    }
+    /* CPMM */
+    else if(MM == "cpmm") {
+      println("cpmm")
+
+        MeMMExecutionHelper.CubeMMStreamGPUTest(1, 1, leftColBlkNum , matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+
+
+    }else{
+      println("rmm")
+      val hdfsBlockSize = 0.256
+//      val numPart = Math.max(Math.ceil(rightColBlkNum * leftSparsity+leftRowBlkNum * rightSparsity/0.256),1).toInt
+      val numPart = leftRowBlkNum * leftColBlkNum * rightColBlkNum
+      if(device == "gpu")
+        MeMMExecutionHelper.rmmWithoutPartitionGPU(p,q,left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,blkSize,   numPart)
+      else
+        MeMMExecutionHelper.rmmWithoutPartition(p,q,left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, numPart,  sc)
+//
+    }
+    //    MeMMExecutionHelper.rmmDuplicationRight(p*q*r, matA, matB, leftRowBlkNum, rightColBlkNum)
 //    MeMMExecutionHelper.cpmm(120, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(120, leftRowBlkNum))
 //      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, 1)
-    MeMMExecutionHelper.rmmWithoutPartitionGPU(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize)
+//    MeMMExecutionHelper.rmmWithoutPartitionGPU(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize)
 //    MeMMExecutionHelper.sparseGPU(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize)
 //    MeMMExecutionHelper.CubeMMGPU(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
 //    MeMMExecutionHelper.CubeMMStreamGPU(1, 1, 1, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMMStreamGPUTest(1, 1, 1, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
 //    MeMMExecutionHelper.CubeMMStreamGPUTest(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
-//    MeMMExecutionHelper.CubeMM(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMM(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
 //    MeMMExecutionHelper.redundancyCoGroupMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,master,slaves,sc)
 //    MeMMExecutionHelper.redundancyInnerMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 //    if (leftTotalBlkNum <= limitNumBlk && leftTotalBlkNum <= rightTotalBlkNum) {

@@ -52,6 +52,11 @@ abstract class DistributedMatrix extends Serializable {
     C
   }
 
+  def inplacemultiply(y: DenseMatrix, C: DenseMatrix): DenseMatrix ={
+    BLAS.gemm(1.0, this, y, 1.0, C)
+    C
+  }
+
   def multiply(y:DenseVector): DenseVector ={
     multiply(y.asInstanceOf[Vector])
   }

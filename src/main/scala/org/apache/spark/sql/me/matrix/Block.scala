@@ -774,7 +774,7 @@ object Block{
     require(a.numRows == c.numRows && b.numCols == c.numCols, s"dimension mismatch a.numRows = ${a.numRows}, C.numRows = ${c.numRows}, b.numCols = ${b.numCols}, c.numCols = ${c.numCols}")
 
     (a, b, c) match {
-      case (ma: DenseMatrix, mb: DenseMatrix, mc: DenseMatrix) => incrementalMultiplyDenseDense(ma, mb, mc)
+      case (ma: DenseMatrix, mb: DenseMatrix, mc: DenseMatrix) => ma.inplacemultiply(mb, mc)
       case (ma: DenseMatrix, mb: SparseMatrix, mc: DenseMatrix) => incrementalMultiplyDenseSparse(ma, mb, mc)
       case (ma: SparseMatrix, mb: DenseMatrix, mc: DenseMatrix) => incrementalMultiplySparseDense(ma, mb, mc)
       case (ma: SparseMatrix, mb: SparseMatrix, mc: DenseMatrix) => incrementalMultiplySparseSparse(ma, mb, mc)
