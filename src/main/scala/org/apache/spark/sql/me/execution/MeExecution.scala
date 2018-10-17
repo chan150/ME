@@ -191,39 +191,39 @@ case class MatrixMatrixMultiplicationExecution(
 
 //  override def metadata: Map[String, String] = right.metadata ++ left.metadata ++ Map((rightRowNum.toString ->rightColNum.toString ))
 
-  override def metadata: Map[String, String] = if(left.metadata.contains("part") && right.metadata.contains("part")){
-    val v = left.metadata.get("part").get
-    val v2 = right.metadata.get("part").get
-
-    if(v.equals(v2)){
-      val newv = v match{
-        case "row" => "col"
-        case "col" => "row"
-        case _ => "error"
-      }
-      Map(("part"-> newv), ("equls" -> "existing"))
-    } else{
-      Map(("part"-> v))
-    }
-
-
-  } else if(left.metadata.contains("part") && !right.metadata.contains("part")){
-    val newV = left.metadata.get("part").get match {
-      case "row" => "col"
-      case "col" => "row"
-      case _ => "error"
-    }
-    Map(("part"-> newV), ("left"-> "existing"))
-  } else if(!left.metadata.contains("part") && right.metadata.contains("part")) {
-    val newV = right.metadata.get("part").get match {
-      case "row" => "col"
-      case "col" => "row"
-      case _ => "error"
-    }
-    Map(("part"-> newV), ("right"-> "existing"))
-  } else{
-    Map(("part"-> "row"), ("notboth" ->"none"))
-  }
+//  override def metadata: Map[String, String] = if(left.metadata.contains("part") && right.metadata.contains("part")){
+//    val v = left.metadata.get("part").get
+//    val v2 = right.metadata.get("part").get
+//
+//    if(v.equals(v2)){
+//      val newv = v match{
+//        case "row" => "col"
+//        case "col" => "row"
+//        case _ => "error"
+//      }
+//      Map(("part"-> newv), ("equls" -> "existing"))
+//    } else{
+//      Map(("part"-> v))
+//    }
+//
+//
+//  } else if(left.metadata.contains("part") && !right.metadata.contains("part")){
+//    val newV = left.metadata.get("part").get match {
+//      case "row" => "col"
+//      case "col" => "row"
+//      case _ => "error"
+//    }
+//    Map(("part"-> newV), ("left"-> "existing"))
+//  } else if(!left.metadata.contains("part") && right.metadata.contains("part")) {
+//    val newV = right.metadata.get("part").get match {
+//      case "row" => "col"
+//      case "col" => "row"
+//      case _ => "error"
+//    }
+//    Map(("part"-> newV), ("right"-> "existing"))
+//  } else{
+//    Map(("part"-> "row"), ("notboth" ->"none"))
+//  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     require(leftColNum == rightRowNum, s"Matrix dimension not match, leftColNum = $leftColNum, rightRowNum =$rightRowNum")
@@ -292,11 +292,59 @@ case class MatrixMatrixMultiplicationExecution(
 
     println(s"left: ($leftRowNum, $leftColNum), blkSize: $blkSize")
     println(s"righ: ($rightRowNum, $rightColNum), blkSize: $blkSize")
-    println(s"memoryExecutor/nodeParallelism: ${memoryExecutor/nodeParallelism}")
+    println(s"Memory per task: ${memoryExecutor/nodeParallelism}")
+
+    val leftSparsity = 1
+    val rightSparsity = 1
 
 
-    println(s"metadata size: ${metadata.size}")
-    metadata.foreach(println)
+//    val leftSize = leftRowBlkNum * leftColBlkNum * sparsity1 * ((blkSize * blkSize * 8) / (1024 * 1024 * 1024 * 1.0))
+    val leftSize = (leftSparsity * leftRowNum * leftColNum * 8) / ((1024 * 1024 * 1024 * 1.0))
+    val rightSize = (rightSparsity *  rightRowNum * rightColNum * 8) / ((1024 * 1024 * 1024 * 1.0))
+    val resultSize = (1 * leftRowNum * rightColNum * 8) / (1024 * 1024 * 1024 * 1.0)
+
+
+    println(s"Matrix A:$leftSize, B: $rightSize, C: $resultSize")
+
+    val clusterMemory = 600
+
+    val Candidate = for {
+      p <- (1 to leftRowBlkNum)
+      q <- (1 to rightColBlkNum)
+      r <- (1 to rightRowBlkNum)
+      if((leftRowBlkNum % p == 0) && (rightColBlkNum % q == 0) && (rightRowBlkNum % r == 0))
+    } yield (p, q, r)
+
+//    val prunCandidate = Candidate.filter{ case (p, q, r) => (leftSize/(p * r) + rightSize/(q * r) + resultSize/(p * q)) < 1.9}
+    val prunCandidate = Candidate.filter{ case (p, q, r) => (leftSize/(p * r) + rightSize/(q * r)+ resultSize/(p * q)) < 5.0}
+
+    val costs = prunCandidate.map{ case (p, q, r) =>
+      ((p, q, r), q * leftSize + p * rightSize + r * resultSize)
+    }
+      .filter{ case ((p, q, r), cost) =>
+      p * q * r >= TaskParallelism
+    }
+
+
+    val sortedCosts = costs.sortBy(x => x._2)
+//    for(i <- 0 until 10){
+//      println(s"${sortedCosts(i)._1}, cost:${sortedCosts(i)._2} ")
+//    }
+
+    val argcost = costs.min(new Ordering[((Int, Int, Int), Double)]{
+      override def compare(x: ((Int, Int, Int), Double), y: ((Int, Int, Int), Double)): Int = {
+        if(x._2 == y._2){
+          x._1._3 compare y._1._3
+        }else {
+          x._2 compare y._2
+        }
+      }
+    })
+
+
+//
+//    println(s"metadata size: ${metadata.size}")
+//    metadata.foreach(println)
 
     val master = sc.master.replace("spark://", "").split(":")(0)
     val slaves = sc.statusTracker.getExecutorInfos.filter(_.host() != master).map{a =>
@@ -307,10 +355,13 @@ case class MatrixMatrixMultiplicationExecution(
     val matA = left.execute()
     val matB = right.execute()
 
-    val p = 6
-    val q = 10
-    val k = 2
+//    val p = 1
+//    val q = 100
+//    val r = 1
 
+    val (p, q, r) = argcost._1
+
+    println(s"p: $p, q: $q, r: $r, cost:${argcost._2}GB")
 
 //    1, 1, master, slaves
 //            if(leftColBlkNum == 1 && rightRowBlkNum == 1){
@@ -324,14 +375,82 @@ case class MatrixMatrixMultiplicationExecution(
 //          MeExecutionHelper.matrixMultiplyGeneral(left.execute(), right.execute(), bc)
 //        }
 
-//    MeMMExecutionHelper.rmmDuplicationLeft(60, matA, matB, leftRowBlkNum, rightColBlkNum)
-//    MeMMExecutionHelper.cpmm(10, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(10, leftRowBlkNum))
 
-    MeMMExecutionHelper.CubeMMGPU(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
-//    MeMMExecutionHelper.CubeMM(p, q, k, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
+    val MM = "cpmm"
+    val device ="gpu"
+
+    if(MM == "cube") {
+
+      if(device == "gpu")
+      /* cubeMM*/
+        MeMMExecutionHelper.CubeMMStreamGPUTest(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+      else{
+        val prunCandidate2 = Candidate.filter{ case (p, q, r) => (leftSize/(p * r) + rightSize/(q * r)+ resultSize/(p * q)) < 3.0}
+
+        val costs2 = prunCandidate.map{ case (p, q, r) =>
+          ((p, q, r), q * leftSize + p * rightSize + r * resultSize)
+        }
+          .filter{ case ((p, q, r), cost) =>
+            p * q * r >= 500
+          }
+
+        val sortedCosts = costs2.map(x => ((x._1, x._1._1*x._1._2*x._1._3), x._2)).sortBy(x => (x._2, -x._1._2))
+        for(i <- 0 until 3){
+          println(s"${sortedCosts(i)._1}, cost:${sortedCosts(i)._2} ")
+        }
+
+        val argcost2 = costs2.min(new Ordering[((Int, Int, Int), Double)]{
+          override def compare(x: ((Int, Int, Int), Double), y: ((Int, Int, Int), Double)): Int = {
+              if (x._2 == y._2) {
+                x._1._3 compare y._1._3
+              } else {
+                x._2 compare y._2
+              }
+            }
+        })
+
+        val (cpu_p, cpu_q, cpu_r) = argcost2._1
+        println(s"p: $cpu_p, q: $cpu_q, r: $cpu_r, cost:${argcost2._2}GB")
+        MeMMExecutionHelper.CubeMM(cpu_p, cpu_q, cpu_r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
+      }
+    }
+    /* BroadcastMM */
+    else if(MM == "bmm") {
+      println("bmm")
+//      val numPart = TaskParallelism
+
+      MeMMExecutionHelper.CubeMMStreamGPUTest(1, leftColBlkNum, 1, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+    }
+    /* CPMM */
+    else if(MM == "cpmm") {
+      println("cpmm")
+
+        MeMMExecutionHelper.CubeMMStreamGPUTest(1, 1, leftColBlkNum , matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+
+
+    }else{
+      println("rmm")
+      val hdfsBlockSize = 0.256
+//      val numPart = Math.max(Math.ceil(rightColBlkNum * leftSparsity+leftRowBlkNum * rightSparsity/0.256),1).toInt
+      val numPart = leftRowBlkNum * leftColBlkNum * rightColBlkNum
+      if(device == "gpu")
+        MeMMExecutionHelper.rmmWithoutPartitionGPU(p,q,left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,blkSize,   numPart)
+      else
+        MeMMExecutionHelper.rmmWithoutPartition(p,q,left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, numPart,  sc)
+//
+    }
+    //    MeMMExecutionHelper.rmmDuplicationRight(p*q*r, matA, matB, leftRowBlkNum, rightColBlkNum)
+//    MeMMExecutionHelper.cpmm(120, matA, matB,leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, new RowPartitioner(120, leftRowBlkNum))
+//      MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, 1)
+//    MeMMExecutionHelper.rmmWithoutPartitionGPU(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize)
+//    MeMMExecutionHelper.sparseGPU(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize)
+//    MeMMExecutionHelper.CubeMMGPU(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMMStreamGPU(1, 1, 1, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMMStreamGPUTest(1, 1, 1, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMMStreamGPUTest(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, blkSize, master, slaves, sc)
+//    MeMMExecutionHelper.CubeMM(p, q, r, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum, master, slaves, sc)
 //    MeMMExecutionHelper.redundancyCoGroupMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum,master,slaves,sc)
 //    MeMMExecutionHelper.redundancyInnerMM(p,q, matA, matB, leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
-//    MeMMExecutionHelper.rmmWithoutPartition(left.execute(), right.execute(), leftRowBlkNum, leftColBlkNum, rightRowBlkNum, rightColBlkNum)
 //    if (leftTotalBlkNum <= limitNumBlk && leftTotalBlkNum <= rightTotalBlkNum) {
     ////      val n = if (TaskParallelism > rightColBlkNum) rightColBlkNum else TaskParallelism
     ////      println(s"In rmmDuplicationLeft, number of partition: $n")

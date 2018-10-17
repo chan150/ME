@@ -6,7 +6,7 @@ import org.apache.spark.sql.me.serializer.MeSerializer
 import org.apache.spark.{Partitioner, SparkConf}
 
 class RowPartitioner(n: Int, val numRowBlks:Long) extends Partitioner {
-  require(n >= 0, s"Number of partitions cannot be negative but found $n")
+  require(n > 0, s"Number of partitions cannot be negative but found $n")
 
   val rowsInPartition = if(numRowBlks < n) numRowBlks.toDouble else ((numRowBlks*1.0)/(n*1.0))
   override val numPartitions = n

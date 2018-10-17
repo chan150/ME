@@ -52,6 +52,11 @@ abstract class DistributedMatrix extends Serializable {
     C
   }
 
+  def inplacemultiply(y: DenseMatrix, C: DenseMatrix): DenseMatrix ={
+    BLAS.gemm(1.0, this, y, 1.0, C)
+    C
+  }
+
   def multiply(y:DenseVector): DenseVector ={
     multiply(y.asInstanceOf[Vector])
   }
@@ -285,6 +290,11 @@ object DenseMatrix {
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
 
+  def randR(numRows: Int, numCols: Int, rng: java.util.Random): DenseMatrix ={
+    require(numRows.toLong * numCols <= Int.MaxValue, s"$numRows x $numCols dense matrix is too large to allocate")
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(Math.ceil(rng.nextDouble())))
+  }
+
   def randn(numRows: Int, numCols: Int, rng: java.util.Random): DenseMatrix ={
     require(numRows.toLong * numCols <= Int.MaxValue, s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
@@ -328,7 +338,7 @@ case class SparseMatrix (override val numRows: Int,
   } else{
     require(colPtrs.length == numCols + 1, s"Expecting ${numCols + 1} colPtrs when numCols = $numCols but got ${colPtrs.length}")
   }
-  require(values.length == colPtrs.last, "The last value of colPtrs must equal the number of elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
+  require(values.length == colPtrs.last, s"The last value of colPtrs must equal the number of elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
 
   def this(
           numRows: Int,
@@ -565,6 +575,10 @@ object SparseMatrix{
   def sprand(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix ={
     val mat = genRandMatrix(numRows, numCols, density, rng)
     mat.update(i => rng.nextDouble())
+  }
+  def sprandR(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix ={
+    val mat = genRandMatrix(numRows, numCols, density, rng)
+    mat.update(i => Math.ceil(rng.nextDouble()))
   }
 
   def sprandn(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix ={

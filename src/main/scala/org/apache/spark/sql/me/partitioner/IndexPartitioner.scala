@@ -12,7 +12,7 @@ import org.apache.spark.Partitioner
 
 class IndexPartitioner(n: Int, val basePart: Partitioner) extends Partitioner {
 
-  require(n >= 0, s"Number of partitions cannot be negative but found $n")
+  require(n > 0, s"Number of partitions cannot be negative but found $n")
 
   override val numPartitions: Int = n
 

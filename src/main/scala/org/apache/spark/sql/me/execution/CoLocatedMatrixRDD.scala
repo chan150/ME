@@ -94,6 +94,7 @@ class CoLocatedMatrixRDD[K: ClassTag]( sc: SparkContext,
     array
   }
   override def getPreferredLocations(split: Partition): Seq[String] = {
+//    println(s"destination: ${slaves((split.asInstanceOf[CoGroupPartition].index / range) % slaves.length)}")
     Seq{slaves((split.asInstanceOf[CoGroupPartition].index / range) % slaves.length)}
   }
 
